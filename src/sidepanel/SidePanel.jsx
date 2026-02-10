@@ -27,6 +27,7 @@ const SidePanel = () => {
   const [simulateJsonCache, setSimulateJsonCache] = useState({});
   const [assertTemplateCache, setAssertTemplateCache] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
+  const [fileStatus, setFileStatus] = useState('');
 
   const defaultSettings = {
     enabled: true,
@@ -177,7 +178,7 @@ const SidePanel = () => {
         rows={6}
         style={{ width: '100%', fontSize: '12px', padding: '8px', boxSizing: 'border-box' }}
       />
-      <div style={{ margin: '8px 0' }}>
+      <div style={{ margin: '8px 0', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
@@ -187,6 +188,28 @@ const SidePanel = () => {
         >
           解析
         </button>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <input
+            type="file"
+            accept=".md,text/markdown"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              const reader = new FileReader()
+              reader.onload = () => {
+                const text = String(reader.result || '')
+                setMdInput(text)
+                const parsed = parseMarkdown(text)
+                setMdOutput(JSON.stringify(parsed, null, 2))
+                setFileStatus('已导入 Markdown')
+              }
+              reader.onerror = () => setFileStatus('导入失败')
+              reader.readAsText(file)
+            }}
+          />
+          导入 Markdown
+        </label>
+        <span style={{ fontSize: '12px', color: '#666' }}>{fileStatus}</span>
       </div>
       <pre
         style={{
@@ -264,7 +287,7 @@ const SidePanel = () => {
         placeholder="执行计划将显示在这里..."
       />
 
-      <div style={{ marginTop: '12px' }}>
+      <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
@@ -274,6 +297,21 @@ const SidePanel = () => {
           }}
         >
           执行模拟
+        </button>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            const data = JSON.stringify(steps, null, 2)
+            const blob = new Blob([data], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = 'steps.json'
+            a.click()
+            URL.revokeObjectURL(url)
+          }}
+        >
+          导出 Steps
         </button>
       </div>
       <textarea
@@ -322,7 +360,45 @@ const SidePanel = () => {
         placeholder="断言模板将显示在这里..."
       />
 
-      <div style={{ marginTop: '12px' }}>
+      <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            let docJson = {}
+            try {
+              docJson = mdOutput ? JSON.parse(mdOutput) : parseMarkdown(mdInput || '')
+            } catch (e) {
+              docJson = parseMarkdown(mdInput || '')
+            }
+            const prompt = assemblePrompt({ steps, docJson })
+            const exec = executePlan(steps)
+            const assertsPlan = {
+              ui: uiValidate({ steps }),
+              text: textValidate({ steps }),
+              data: dataValidate({ steps })
+            }
+            const template = generateAssertionTemplate(docJson)
+            setPromptText(prompt)
+            setPlanText(JSON.stringify({ executor: exec, assertions: assertPlan({ steps }) }, null, 2))
+            setValidateJsonCache(assertsPlan)
+            setValidateText(JSON.stringify(assertsPlan, null, 2))
+            setSimulateJsonCache(exec)
+            setSimulateText(JSON.stringify(exec, null, 2))
+            setAssertTemplateCache(template)
+            setAssertTemplateText(template)
+
+            const unified = assembleUnifiedOutput({
+              promptText: prompt,
+              planJson: { executor: exec, assertions: assertPlan({ steps }) },
+              validateJson: assertsPlan || {},
+              simulateJson: exec || {},
+              assertionTemplate: template || ''
+            })
+            setUnifiedText(unified)
+          }}
+        >
+          一键生成全流程
+        </button>
         <button
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {

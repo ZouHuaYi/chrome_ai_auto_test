@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:ext": "vite build",
+    "package:ext": "powershell -Command \"Compress-Archive -Path dist\\* -DestinationPath dist\\chrome_ai_auto_test.zip -Force\"",
     "lint": "eslint .",
     "preview": "vite preview"
   },
