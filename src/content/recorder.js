@@ -14,6 +14,12 @@
 const TOKEN_LIKE_PATTERN = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+$/
 const LONG_HEX_PATTERN = /^[a-f0-9]{32,}$/i
 
+const INPUT_DEBOUNCE_MS = 300
+const CLICK_THROTTLE_MS = 500
+
+const inputTimers = new Map()
+const clickTimers = new Map()
+
 function getAttributeText(element) {
   const attrs = [
     element.getAttribute('name'),
@@ -112,12 +118,20 @@ function handleClick(event) {
   const target = event.target
   if (!(target instanceof Element)) return
 
+  const xpath = getXPath(target)
+  if (!xpath) return
+
+  const now = Date.now()
+  const last = clickTimers.get(xpath) || 0
+  if (now - last < CLICK_THROTTLE_MS) return
+  clickTimers.set(xpath, now)
+
   const step = {
     type: 'click',
-    target: getXPath(target),
+    target: xpath,
     tag: target.tagName.toLowerCase(),
     text: (target.textContent || '').trim().slice(0, 120),
-    timestamp: Date.now(),
+    timestamp: now,
     url: window.location.href
   }
 
@@ -130,21 +144,33 @@ function handleInput(event) {
 
   if (!target.matches('input, textarea, [contenteditable="true"]')) return
 
-  const rawValue = getInputValue(target)
-  const sensitive = isSensitiveField(target, rawValue)
-  const maskedValue = maskValue(rawValue, sensitive)
+  const xpath = getXPath(target)
+  if (!xpath) return
 
-  const step = {
-    type: 'input',
-    target: getXPath(target),
-    tag: target.tagName.toLowerCase(),
-    value: maskedValue,
-    sensitive,
-    timestamp: Date.now(),
-    url: window.location.href
-  }
+  // debounce per element
+  const prevTimer = inputTimers.get(xpath)
+  if (prevTimer) clearTimeout(prevTimer)
 
-  sendStep(step)
+  const timer = setTimeout(() => {
+    const rawValue = getInputValue(target)
+    const sensitive = isSensitiveField(target, rawValue)
+    const maskedValue = maskValue(rawValue, sensitive)
+
+    const step = {
+      type: 'input',
+      target: xpath,
+      tag: target.tagName.toLowerCase(),
+      value: maskedValue,
+      sensitive,
+      timestamp: Date.now(),
+      url: window.location.href
+    }
+
+    sendStep(step)
+    inputTimers.delete(xpath)
+  }, INPUT_DEBOUNCE_MS)
+
+  inputTimers.set(xpath, timer)
 }
 
 document.addEventListener('click', handleClick, true)
