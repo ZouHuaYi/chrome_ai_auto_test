@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { parseMarkdown } from '../parser/markdown.js';
 import { assemblePrompt } from '../prompt/assembler.js';
+import { assembleUnifiedOutput } from '../prompt/unified.js';
 import { executePlan } from '../executor/executor.js';
 import { assertPlan } from '../assertions/assertor.js';
 
@@ -10,6 +11,7 @@ const SidePanel = () => {
   const [mdOutput, setMdOutput] = useState('');
   const [promptText, setPromptText] = useState('');
   const [planText, setPlanText] = useState('');
+  const [unifiedText, setUnifiedText] = useState('');
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -167,6 +169,37 @@ const SidePanel = () => {
           marginTop: '8px'
         }}
         placeholder="执行计划将显示在这里..."
+      />
+
+      <div style={{ marginTop: '12px' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            let planJson = {}
+            try {
+              planJson = planText ? JSON.parse(planText) : {}
+            } catch (e) {
+              planJson = {}
+            }
+            const unified = assembleUnifiedOutput({ promptText, planJson })
+            setUnifiedText(unified)
+          }}
+        >
+          生成统一输出
+        </button>
+      </div>
+      <textarea
+        value={unifiedText}
+        readOnly
+        rows={8}
+        style={{
+          width: '100%',
+          fontSize: '12px',
+          padding: '8px',
+          boxSizing: 'border-box',
+          marginTop: '8px'
+        }}
+        placeholder="统一输出将显示在这里..."
       />
     </div>
   );
