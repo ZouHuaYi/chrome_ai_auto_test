@@ -26,6 +26,7 @@ const SidePanel = () => {
   const [assertTemplateText, setAssertTemplateText] = useState('');
   const [simulateJsonCache, setSimulateJsonCache] = useState({});
   const [assertTemplateCache, setAssertTemplateCache] = useState('');
+  const [copyStatus, setCopyStatus] = useState('');
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -279,6 +280,22 @@ const SidePanel = () => {
         }}
         placeholder="统一输出将显示在这里..."
       />
+      <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(unifiedText || '')
+              setCopyStatus('复制成功')
+            } catch (e) {
+              setCopyStatus('复制失败')
+            }
+          }}
+        >
+          复制统一输出
+        </button>
+        <span style={{ fontSize: '12px', color: '#666' }}>{copyStatus}</span>
+      </div>
 
       <div style={{ marginTop: '12px' }}>
         <button
