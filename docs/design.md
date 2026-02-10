@@ -1,15 +1,22 @@
-# 架构与设计（第二阶段：录制优化）
+# 架构与设计（Markdown 解析模块）
 
-## 录制优化策略
-- Input：使用按元素 key（xpath）做防抖，300ms 内只保留最后一次输入事件。
-- Click：使用按元素 key（xpath）做节流，500ms 内只记录一次点击。
-
-## 数据结构
-保持统一消息结构：
+## 输出结构
 ```
-{ action: 'RECORD_STEP', payload: { type, target, value?, text?, timestamp, url } }
+{
+  type: 'document',
+  children: [
+    { type: 'heading', level: 1, text: '...' },
+    { type: 'paragraph', text: '...' },
+    { type: 'list', ordered: false, items: ['a','b'] }
+  ]
+}
 ```
 
-## 关键点
-- 防抖/节流在 content_script 层完成，减少无效消息传输。
-- 以 xpath 为 key 保持同一控件的节流范围。
+## 解析策略（基础版）
+- 行级解析：
+  - `#` 开头 → heading
+  - `-/*/+` 或 `1.` → list item
+  - 其他非空行 → paragraph（连续行合并）
+
+## 约定
+- 先保证稳定输出结构，后续再引入 markdown-it/AST。
