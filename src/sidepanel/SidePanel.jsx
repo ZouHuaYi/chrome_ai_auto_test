@@ -16,6 +16,7 @@ const SidePanel = () => {
   const [planText, setPlanText] = useState('');
   const [unifiedText, setUnifiedText] = useState('');
   const [validateText, setValidateText] = useState('');
+  const [validateJsonCache, setValidateJsonCache] = useState({});
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -185,7 +186,11 @@ const SidePanel = () => {
             } catch (e) {
               planJson = {}
             }
-            const unified = assembleUnifiedOutput({ promptText, planJson })
+            const unified = assembleUnifiedOutput({
+              promptText,
+              planJson,
+              validateJson: validateJsonCache || {}
+            })
             setUnifiedText(unified)
           }}
         >
@@ -216,6 +221,7 @@ const SidePanel = () => {
               text: textValidate(ctx),
               data: dataValidate(ctx)
             }
+            setValidateJsonCache(plan)
             setValidateText(JSON.stringify(plan, null, 2))
           }}
         >
