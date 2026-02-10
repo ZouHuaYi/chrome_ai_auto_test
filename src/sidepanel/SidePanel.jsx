@@ -28,11 +28,23 @@ const SidePanel = () => {
   const [assertTemplateCache, setAssertTemplateCache] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
 
+  const defaultSettings = {
+    enabled: true,
+    events: { click: true, input: true, change: true, scroll: false },
+    debounceMs: 300,
+    throttleMs: 500,
+    networkCapture: false
+  };
+  const [settings, setSettings] = useState(defaultSettings);
+
   useEffect(() => {
     // 1. Load initial state from storage
-    chrome.storage.local.get(['recorded_steps'], (result) => {
+    chrome.storage.local.get(['recorded_steps', 'settings'], (result) => {
       if (result.recorded_steps && Array.isArray(result.recorded_steps)) {
         setSteps(result.recorded_steps);
+      }
+      if (result.settings) {
+        setSettings({ ...defaultSettings, ...result.settings });
       }
     });
 
@@ -57,8 +69,74 @@ const SidePanel = () => {
     });
   };
 
+  const saveSettings = (next) => {
+    setSettings(next);
+    chrome.storage.local.set({ settings: next });
+  };
+
   return (
     <div style={{ padding: '16px', fontFamily: 'sans-serif' }}>
+      <h2>录制配置</h2>
+      <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+        <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={settings.enabled}
+            onChange={(e) => saveSettings({ ...settings, enabled: e.target.checked })}
+          />
+          启用录制
+        </label>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          {['click', 'input', 'change', 'scroll'].map((k) => (
+            <label key={k} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={settings.events?.[k]}
+                onChange={(e) =>
+                  saveSettings({
+                    ...settings,
+                    events: { ...settings.events, [k]: e.target.checked }
+                  })
+                }
+              />
+              {k}
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <label>
+            防抖(ms)：
+            <input
+              type="number"
+              value={settings.debounceMs}
+              style={{ width: '80px', marginLeft: '6px' }}
+              onChange={(e) =>
+                saveSettings({ ...settings, debounceMs: Number(e.target.value) || 0 })
+              }
+            />
+          </label>
+          <label>
+            节流(ms)：
+            <input
+              type="number"
+              value={settings.throttleMs}
+              style={{ width: '80px', marginLeft: '6px' }}
+              onChange={(e) =>
+                saveSettings({ ...settings, throttleMs: Number(e.target.value) || 0 })
+              }
+            />
+          </label>
+        </div>
+        <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={settings.networkCapture}
+            onChange={(e) => saveSettings({ ...settings, networkCapture: e.target.checked })}
+          />
+          网络采集
+        </label>
+      </div>
+
       <h2>录制步骤 ({steps.length})</h2>
       <div style={{ marginBottom: '16px' }}>
         <button onClick={handleClear} style={{ cursor: 'pointer', padding: '4px 8px' }}>清空记录</button>

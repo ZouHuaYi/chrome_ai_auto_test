@@ -4,6 +4,32 @@
 // 3) Persists to chrome.storage.local
 
 const STORAGE_KEY = 'recorded_steps';
+const SETTINGS_KEY = 'settings';
+const DEFAULT_SETTINGS = {
+  enabled: true,
+  events: { click: true, input: true, change: true, scroll: false },
+  debounceMs: 300,
+  throttleMs: 500,
+  networkCapture: false
+};
+
+let currentSettings = { ...DEFAULT_SETTINGS };
+
+function loadSettings() {
+  chrome.storage.local.get([SETTINGS_KEY]).then((data) => {
+    if (data[SETTINGS_KEY]) {
+      currentSettings = { ...DEFAULT_SETTINGS, ...data[SETTINGS_KEY] };
+    }
+  });
+}
+
+loadSettings();
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes[SETTINGS_KEY]) {
+    currentSettings = { ...DEFAULT_SETTINGS, ...(changes[SETTINGS_KEY].newValue || {}) };
+  }
+});
 
 chrome.runtime.onInstalled.addListener(() => {
   // no-op for now
@@ -52,3 +78,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+chrome.webRequest.onCompleted.addListener(
+  (details) => {
+    if (!currentSettings.networkCapture) return;
+    const step = {
+      type: 'network',
+      target: details.url,
+      url: details.url,
+      method: details.method,
+      statusCode: details.statusCode,
+      timestamp: Date.now()
+    };
+    appendStep(step).catch(() => {});
+    chrome.runtime.sendMessage({ action: 'RECORD_STEP', payload: step }).catch?.(() => {});
+  },
+  { urls: ['<all_urls>'] }
+);

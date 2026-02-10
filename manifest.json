@@ -3,7 +3,7 @@
   "name": "Chrome AI Auto Test",
   "version": "1.0.0",
   "description": "基于 AI 的自动化回归测试录制工具",
-  "permissions": ["sidePanel", "storage", "tabs", "activeTab"],
+  "permissions": ["sidePanel", "storage", "tabs", "activeTab", "webRequest"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "src/background/service_worker.js",
