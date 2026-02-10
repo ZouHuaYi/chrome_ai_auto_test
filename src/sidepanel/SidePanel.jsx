@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { parseMarkdown } from '../parser/markdown.js';
 
 const SidePanel = () => {
   const [steps, setSteps] = useState([]);
+  const [mdInput, setMdInput] = useState('');
+  const [mdOutput, setMdOutput] = useState('');
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -63,6 +66,41 @@ const SidePanel = () => {
           <p style={{ fontSize: '12px' }}>请在网页上进行点击或输入操作...</p>
         </div>
       )}
+
+      <hr style={{ margin: '20px 0' }} />
+
+      <h3 style={{ marginBottom: '8px' }}>Markdown 解析预览</h3>
+      <textarea
+        value={mdInput}
+        onChange={(e) => setMdInput(e.target.value)}
+        placeholder="在这里粘贴或输入 Markdown..."
+        rows={6}
+        style={{ width: '100%', fontSize: '12px', padding: '8px', boxSizing: 'border-box' }}
+      />
+      <div style={{ margin: '8px 0' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            const parsed = parseMarkdown(mdInput || '')
+            setMdOutput(JSON.stringify(parsed, null, 2))
+          }}
+        >
+          解析
+        </button>
+      </div>
+      <pre
+        style={{
+          background: '#111',
+          color: '#0f0',
+          padding: '8px',
+          fontSize: '11px',
+          borderRadius: '4px',
+          maxHeight: '200px',
+          overflow: 'auto'
+        }}
+      >
+        {mdOutput || '解析结果将显示在这里...'}
+      </pre>
     </div>
   );
 };
