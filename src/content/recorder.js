@@ -102,7 +102,7 @@ function getInputValue(target) {
 
 function sendStep(step) {
   try {
-    chrome.runtime.sendMessage({ type: 'recording-step', step })
+    chrome.runtime.sendMessage({ action: 'RECORD_STEP', payload: step })
   } catch (error) {
     // Content script can be injected without the extension runtime ready.
   }
@@ -113,11 +113,12 @@ function handleClick(event) {
   if (!(target instanceof Element)) return
 
   const step = {
-    action: 'click',
-    xpath: getXPath(target),
+    type: 'click',
+    target: getXPath(target),
     tag: target.tagName.toLowerCase(),
     text: (target.textContent || '').trim().slice(0, 120),
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    url: window.location.href
   }
 
   sendStep(step)
@@ -134,12 +135,13 @@ function handleInput(event) {
   const maskedValue = maskValue(rawValue, sensitive)
 
   const step = {
-    action: 'input',
-    xpath: getXPath(target),
+    type: 'input',
+    target: getXPath(target),
     tag: target.tagName.toLowerCase(),
     value: maskedValue,
     sensitive,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    url: window.location.href
   }
 
   sendStep(step)
