@@ -1,11 +1,8 @@
-# 架构与设计（执行模拟与断言模板）
+# 架构与设计（第五阶段完善：统一输出联动）
 
-## 执行模拟
-- executePlan 返回模拟日志：[{step, status, note}]
-
-## 断言模板
-- generateAssertionTemplate(docJson) -> string
-
-## 侧边栏
-- 新增按钮：执行模拟
-- 新增按钮：生成断言模板
+## 统一输出结构
+- Prompt
+- 执行计划 JSON
+- 校验计划 JSON
+- 执行模拟 JSON
+- 断言模板文本
