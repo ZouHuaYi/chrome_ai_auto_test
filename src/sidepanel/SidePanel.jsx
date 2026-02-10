@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { parseMarkdown } from '../parser/markdown.js';
+import { assemblePrompt } from '../prompt/assembler.js';
 
 const SidePanel = () => {
   const [steps, setSteps] = useState([]);
   const [mdInput, setMdInput] = useState('');
   const [mdOutput, setMdOutput] = useState('');
+  const [promptText, setPromptText] = useState('');
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -101,6 +103,38 @@ const SidePanel = () => {
       >
         {mdOutput || '解析结果将显示在这里...'}
       </pre>
+
+      <div style={{ marginTop: '12px' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            let docJson = {}
+            try {
+              docJson = mdOutput ? JSON.parse(mdOutput) : parseMarkdown(mdInput || '')
+            } catch (e) {
+              docJson = parseMarkdown(mdInput || '')
+            }
+            const prompt = assemblePrompt({ steps, docJson })
+            setPromptText(prompt)
+          }}
+        >
+          生成 Prompt
+        </button>
+      </div>
+
+      <textarea
+        value={promptText}
+        readOnly
+        rows={8}
+        style={{
+          width: '100%',
+          fontSize: '12px',
+          padding: '8px',
+          boxSizing: 'border-box',
+          marginTop: '8px'
+        }}
+        placeholder="Prompt 将显示在这里..."
+      />
     </div>
   );
 };
