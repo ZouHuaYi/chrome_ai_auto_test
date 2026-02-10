@@ -8,6 +8,7 @@ import { validate as uiValidate } from '../validators/uiValidator.js';
 import { validate as textValidate } from '../validators/textValidator.js';
 import { validate as dataValidate } from '../validators/dataValidator.js';
 import { buildValidationResultPlaceholder } from '../validators/resultPlaceholder.js';
+import { run as runValidatorEngine } from '../validators/engine.js';
 
 const SidePanel = () => {
   const [steps, setSteps] = useState([]);
@@ -19,6 +20,7 @@ const SidePanel = () => {
   const [validateText, setValidateText] = useState('');
   const [validateJsonCache, setValidateJsonCache] = useState({});
   const [validateResultText, setValidateResultText] = useState('');
+  const [execStatus, setExecStatus] = useState('PENDING');
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -268,6 +270,23 @@ const SidePanel = () => {
         }}
         placeholder="校验结果占位将显示在这里..."
       />
+
+      <div style={{ marginTop: '12px' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            setExecStatus('RUNNING')
+            const engine = runValidatorEngine({ steps })
+            const status = engine?.result?.status || 'DONE'
+            setExecStatus(status)
+          }}
+        >
+          执行状态占位
+        </button>
+        <div style={{ marginTop: '6px', fontSize: '12px', color: '#333' }}>
+          执行状态: {execStatus}
+        </div>
+      </div>
     </div>
   );
 };
