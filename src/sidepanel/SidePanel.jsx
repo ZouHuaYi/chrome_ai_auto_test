@@ -29,6 +29,12 @@ const SidePanel = () => {
   const [copyStatus, setCopyStatus] = useState('');
   const [fileStatus, setFileStatus] = useState('');
 
+  const defaultModelConfig = { model: 'gpt-4o', temperature: 0.2, max_tokens: 2048 };
+  const [modelConfig, setModelConfig] = useState(defaultModelConfig);
+  const [feishuText, setFeishuText] = useState('');
+  const [mindmapText, setMindmapText] = useState('');
+  const [importStatus, setImportStatus] = useState('');
+
   const defaultSettings = {
     enabled: true,
     events: { click: true, input: true, change: true, scroll: false },
@@ -40,12 +46,15 @@ const SidePanel = () => {
 
   useEffect(() => {
     // 1. Load initial state from storage
-    chrome.storage.local.get(['recorded_steps', 'settings'], (result) => {
+    chrome.storage.local.get(['recorded_steps', 'settings', 'modelConfig'], (result) => {
       if (result.recorded_steps && Array.isArray(result.recorded_steps)) {
         setSteps(result.recorded_steps);
       }
       if (result.settings) {
         setSettings({ ...defaultSettings, ...result.settings });
+      }
+      if (result.modelConfig) {
+        setModelConfig({ ...defaultModelConfig, ...result.modelConfig });
       }
     });
 
@@ -75,8 +84,49 @@ const SidePanel = () => {
     chrome.storage.local.set({ settings: next });
   };
 
+  const saveModelConfig = (next) => {
+    setModelConfig(next);
+    chrome.storage.local.set({ modelConfig: next });
+  };
+
   return (
     <div style={{ padding: '16px', fontFamily: 'sans-serif' }}>
+      <h2>模型配置</h2>
+      <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+        <label>
+          Model：
+          <input
+            type="text"
+            value={modelConfig.model}
+            style={{ width: '180px', marginLeft: '6px' }}
+            onChange={(e) => saveModelConfig({ ...modelConfig, model: e.target.value })}
+          />
+        </label>
+        <label>
+          Temperature：
+          <input
+            type="number"
+            step="0.1"
+            value={modelConfig.temperature}
+            style={{ width: '80px', marginLeft: '6px' }}
+            onChange={(e) =>
+              saveModelConfig({ ...modelConfig, temperature: Number(e.target.value) })
+            }
+          />
+        </label>
+        <label>
+          Max Tokens：
+          <input
+            type="number"
+            value={modelConfig.max_tokens}
+            style={{ width: '100px', marginLeft: '6px' }}
+            onChange={(e) =>
+              saveModelConfig({ ...modelConfig, max_tokens: Number(e.target.value) })
+            }
+          />
+        </label>
+      </div>
+
       <h2>录制配置</h2>
       <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
         <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -210,6 +260,46 @@ const SidePanel = () => {
           导入 Markdown
         </label>
         <span style={{ fontSize: '12px', color: '#666' }}>{fileStatus}</span>
+      </div>
+
+      <h3 style={{ marginBottom: '8px' }}>飞书文档导入（占位）</h3>
+      <textarea
+        value={feishuText}
+        onChange={(e) => setFeishuText(e.target.value)}
+        placeholder="粘贴飞书文档内容或 Doc Token..."
+        rows={4}
+        style={{ width: '100%', fontSize: '12px', padding: '8px', boxSizing: 'border-box' }}
+      />
+
+      <h3 style={{ marginBottom: '8px', marginTop: '12px' }}>思维导图导入（占位）</h3>
+      <textarea
+        value={mindmapText}
+        onChange={(e) => setMindmapText(e.target.value)}
+        placeholder="粘贴思维导图 JSON / 文本..."
+        rows={4}
+        style={{ width: '100%', fontSize: '12px', padding: '8px', boxSizing: 'border-box' }}
+      />
+      <div style={{ margin: '8px 0', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <input
+            type="file"
+            accept=".json,.md,.txt"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              const reader = new FileReader()
+              reader.onload = () => {
+                const text = String(reader.result || '')
+                setMindmapText(text)
+                setImportStatus('已导入思维导图')
+              }
+              reader.onerror = () => setImportStatus('导入失败')
+              reader.readAsText(file)
+            }}
+          />
+          导入思维导图
+        </label>
+        <span style={{ fontSize: '12px', color: '#666' }}>{importStatus}</span>
       </div>
       <pre
         style={{
