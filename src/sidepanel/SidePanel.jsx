@@ -4,6 +4,9 @@ import { assemblePrompt } from '../prompt/assembler.js';
 import { assembleUnifiedOutput } from '../prompt/unified.js';
 import { executePlan } from '../executor/executor.js';
 import { assertPlan } from '../assertions/assertor.js';
+import { validate as uiValidate } from '../validators/uiValidator.js';
+import { validate as textValidate } from '../validators/textValidator.js';
+import { validate as dataValidate } from '../validators/dataValidator.js';
 
 const SidePanel = () => {
   const [steps, setSteps] = useState([]);
@@ -12,6 +15,7 @@ const SidePanel = () => {
   const [promptText, setPromptText] = useState('');
   const [planText, setPlanText] = useState('');
   const [unifiedText, setUnifiedText] = useState('');
+  const [validateText, setValidateText] = useState('');
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -200,6 +204,36 @@ const SidePanel = () => {
           marginTop: '8px'
         }}
         placeholder="统一输出将显示在这里..."
+      />
+
+      <div style={{ marginTop: '12px' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            const ctx = { steps }
+            const plan = {
+              ui: uiValidate(ctx),
+              text: textValidate(ctx),
+              data: dataValidate(ctx)
+            }
+            setValidateText(JSON.stringify(plan, null, 2))
+          }}
+        >
+          生成校验计划
+        </button>
+      </div>
+      <textarea
+        value={validateText}
+        readOnly
+        rows={6}
+        style={{
+          width: '100%',
+          fontSize: '12px',
+          padding: '8px',
+          boxSizing: 'border-box',
+          marginTop: '8px'
+        }}
+        placeholder="校验计划将显示在这里..."
       />
     </div>
   );
