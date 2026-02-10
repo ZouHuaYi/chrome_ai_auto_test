@@ -1,10 +1,18 @@
 function executePlan(steps = []) {
-  // mock executor: just echo steps
+  const logs = (steps || []).map((step, idx) => {
+    return {
+      index: idx + 1,
+      step,
+      status: 'SIMULATED',
+      note: 'mock replay'
+    }
+  })
+
   return {
     ok: true,
     report: {
-      executed: steps.length,
-      steps
+      executed: logs.length,
+      logs
     }
   }
 }

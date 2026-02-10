@@ -4,6 +4,7 @@ import { assemblePrompt } from '../prompt/assembler.js';
 import { assembleUnifiedOutput } from '../prompt/unified.js';
 import { executePlan } from '../executor/executor.js';
 import { assertPlan } from '../assertions/assertor.js';
+import { generateAssertionTemplate } from '../assertions/template.js';
 import { validate as uiValidate } from '../validators/uiValidator.js';
 import { validate as textValidate } from '../validators/textValidator.js';
 import { validate as dataValidate } from '../validators/dataValidator.js';
@@ -21,6 +22,8 @@ const SidePanel = () => {
   const [validateJsonCache, setValidateJsonCache] = useState({});
   const [validateResultText, setValidateResultText] = useState('');
   const [execStatus, setExecStatus] = useState('PENDING');
+  const [simulateText, setSimulateText] = useState('');
+  const [assertTemplateText, setAssertTemplateText] = useState('');
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -178,6 +181,62 @@ const SidePanel = () => {
           marginTop: '8px'
         }}
         placeholder="执行计划将显示在这里..."
+      />
+
+      <div style={{ marginTop: '12px' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            const exec = executePlan(steps)
+            setSimulateText(JSON.stringify(exec, null, 2))
+          }}
+        >
+          执行模拟
+        </button>
+      </div>
+      <textarea
+        value={simulateText}
+        readOnly
+        rows={6}
+        style={{
+          width: '100%',
+          fontSize: '12px',
+          padding: '8px',
+          boxSizing: 'border-box',
+          marginTop: '8px'
+        }}
+        placeholder="执行模拟日志将显示在这里..."
+      />
+
+      <div style={{ marginTop: '12px' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            let docJson = {}
+            try {
+              docJson = mdOutput ? JSON.parse(mdOutput) : parseMarkdown(mdInput || '')
+            } catch (e) {
+              docJson = parseMarkdown(mdInput || '')
+            }
+            const template = generateAssertionTemplate(docJson)
+            setAssertTemplateText(template)
+          }}
+        >
+          生成断言模板
+        </button>
+      </div>
+      <textarea
+        value={assertTemplateText}
+        readOnly
+        rows={6}
+        style={{
+          width: '100%',
+          fontSize: '12px',
+          padding: '8px',
+          boxSizing: 'border-box',
+          marginTop: '8px'
+        }}
+        placeholder="断言模板将显示在这里..."
       />
 
       <div style={{ marginTop: '12px' }}>
