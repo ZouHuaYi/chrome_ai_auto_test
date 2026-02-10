@@ -1,8 +1,11 @@
-# 架构与设计（执行状态与引擎接入口）
+# 架构与设计（执行模拟与断言模板）
 
-## 执行状态
-- 状态枚举：PENDING / RUNNING / DONE
-- 侧边栏展示占位状态文本
+## 执行模拟
+- executePlan 返回模拟日志：[{step, status, note}]
 
-## 引擎接入口
-- validatorEngine.run(context) -> result
+## 断言模板
+- generateAssertionTemplate(docJson) -> string
+
+## 侧边栏
+- 新增按钮：执行模拟
+- 新增按钮：生成断言模板
