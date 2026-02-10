@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { parseMarkdown } from '../parser/markdown.js';
 import { assemblePrompt } from '../prompt/assembler.js';
+import { executePlan } from '../executor/executor.js';
+import { assertPlan } from '../assertions/assertor.js';
 
 const SidePanel = () => {
   const [steps, setSteps] = useState([]);
   const [mdInput, setMdInput] = useState('');
   const [mdOutput, setMdOutput] = useState('');
   const [promptText, setPromptText] = useState('');
+  const [planText, setPlanText] = useState('');
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -134,6 +137,36 @@ const SidePanel = () => {
           marginTop: '8px'
         }}
         placeholder="Prompt 将显示在这里..."
+      />
+
+      <div style={{ marginTop: '12px' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            const exec = executePlan(steps)
+            const asserts = assertPlan({ steps })
+            const plan = {
+              executor: exec,
+              assertions: asserts
+            }
+            setPlanText(JSON.stringify(plan, null, 2))
+          }}
+        >
+          生成执行计划
+        </button>
+      </div>
+      <textarea
+        value={planText}
+        readOnly
+        rows={6}
+        style={{
+          width: '100%',
+          fontSize: '12px',
+          padding: '8px',
+          boxSizing: 'border-box',
+          marginTop: '8px'
+        }}
+        placeholder="执行计划将显示在这里..."
       />
     </div>
   );
