@@ -1,15 +1,11 @@
-# 架构与设计（Prompt 组装器）
+# 架构与设计（Prompt 模板增强）
 
-## 模块接口
-```
-assemblePrompt({ steps, docJson }) -> string
-```
+## 模板结构
+- 角色与目标
+- 录制步骤（编号）
+- 断言占位符（UI/数据/文案）
+- 失败重试策略
+- 文档结构 JSON
 
-## Prompt 结构
-- 标题：目标说明
-- 录制步骤列表（编号）
-- 文档结构 JSON（序列化）
-
-## 侧边栏交互
-- 按钮：生成 Prompt
-- 结果区：多行文本框展示 Prompt
+## LLM 接口占位
+- 预留字段：model / temperature / max_tokens（仅文本提示，不做调用）
