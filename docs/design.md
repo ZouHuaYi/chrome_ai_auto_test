@@ -1,10 +1,9 @@
-# 架构与设计（第四阶段：校验骨架）
+# 架构与设计（校验计划融合到统一输出）
 
-## 校验模块
-- uiValidator.validate(context)
-- textValidator.validate(context)
-- dataValidator.validate(context)
+## 统一输出结构
+- Prompt
+- 执行计划 JSON
+- 校验计划 JSON
 
 ## 侧边栏
-- 新增按钮：生成校验计划
-- 新增输出区：显示校验计划 JSON
+- 生成统一输出时加入校验计划。
