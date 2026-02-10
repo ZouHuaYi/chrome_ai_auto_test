@@ -1,22 +1,13 @@
-# 架构与设计（产品化完善）
+# 架构与设计（自动化与全流程通畅）
 
-## 配置面板
-- Storage key: settings
-- 结构：
-```
-{
-  enabled: true,
-  events: { click: true, input: true, change: true, scroll: false },
-  debounceMs: 300,
-  throttleMs: 500,
-  networkCapture: false
-}
-```
+## 一键生成
+- 读取 Markdown 输入/文件 → 解析 JSON
+- 生成 Prompt / 执行计划 / 校验计划 / 执行模拟 / 断言模板
+- 生成统一输出
 
-## 采集增强
-- 事件支持：click/input/change/scroll
-- selector 优先级：xpath -> css selector
+## 导出/导入
+- steps.json 导出（Blob 下载）
+- Markdown 文件导入（FileReader）
 
-## 网络采集
-- 使用 chrome.webRequest.onCompleted 记录 {url, method, statusCode}
-- 仅在 networkCapture=true 时启用
+## 自动化打包
+- npm script: package:ext = Compress-Archive dist -> zip
