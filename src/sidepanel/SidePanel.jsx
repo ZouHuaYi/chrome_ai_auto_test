@@ -24,6 +24,8 @@ const SidePanel = () => {
   const [execStatus, setExecStatus] = useState('PENDING');
   const [simulateText, setSimulateText] = useState('');
   const [assertTemplateText, setAssertTemplateText] = useState('');
+  const [simulateJsonCache, setSimulateJsonCache] = useState({});
+  const [assertTemplateCache, setAssertTemplateCache] = useState('');
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -188,6 +190,7 @@ const SidePanel = () => {
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const exec = executePlan(steps)
+            setSimulateJsonCache(exec)
             setSimulateText(JSON.stringify(exec, null, 2))
           }}
         >
@@ -219,6 +222,7 @@ const SidePanel = () => {
               docJson = parseMarkdown(mdInput || '')
             }
             const template = generateAssertionTemplate(docJson)
+            setAssertTemplateCache(template)
             setAssertTemplateText(template)
           }}
         >
@@ -252,7 +256,9 @@ const SidePanel = () => {
             const unified = assembleUnifiedOutput({
               promptText,
               planJson,
-              validateJson: validateJsonCache || {}
+              validateJson: validateJsonCache || {},
+              simulateJson: simulateJsonCache || {},
+              assertionTemplate: assertTemplateCache || ''
             })
             setUnifiedText(unified)
           }}
