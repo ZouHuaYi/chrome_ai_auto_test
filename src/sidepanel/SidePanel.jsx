@@ -7,6 +7,7 @@ import { assertPlan } from '../assertions/assertor.js';
 import { validate as uiValidate } from '../validators/uiValidator.js';
 import { validate as textValidate } from '../validators/textValidator.js';
 import { validate as dataValidate } from '../validators/dataValidator.js';
+import { buildValidationResultPlaceholder } from '../validators/resultPlaceholder.js';
 
 const SidePanel = () => {
   const [steps, setSteps] = useState([]);
@@ -17,6 +18,7 @@ const SidePanel = () => {
   const [unifiedText, setUnifiedText] = useState('');
   const [validateText, setValidateText] = useState('');
   const [validateJsonCache, setValidateJsonCache] = useState({});
+  const [validateResultText, setValidateResultText] = useState('');
 
   useEffect(() => {
     // 1. Load initial state from storage
@@ -240,6 +242,31 @@ const SidePanel = () => {
           marginTop: '8px'
         }}
         placeholder="校验计划将显示在这里..."
+      />
+
+      <div style={{ marginTop: '12px' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            const result = buildValidationResultPlaceholder()
+            setValidateResultText(JSON.stringify(result, null, 2))
+          }}
+        >
+          生成校验结果占位
+        </button>
+      </div>
+      <textarea
+        value={validateResultText}
+        readOnly
+        rows={6}
+        style={{
+          width: '100%',
+          fontSize: '12px',
+          padding: '8px',
+          boxSizing: 'border-box',
+          marginTop: '8px'
+        }}
+        placeholder="校验结果占位将显示在这里..."
       />
     </div>
   );
