@@ -13,5 +13,8 @@ describe('executePlan', () => {
     expect(result.report.executed).toBe(1);
     expect(result.report.logs[0].status).toBe('SIMULATED');
     expect(result.validationResult).toBeNull();
+    expect(result.assertionResult).toBeDefined();
+    expect(result.result).toBeDefined();
+    expect(result.result.replay.report.executed).toBe(1);
   });
 });

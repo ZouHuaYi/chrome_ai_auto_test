@@ -191,3 +191,10 @@ npm run package:ext
 ---
 
 更多需求与设计见 `docs/req.md`、`docs/design.md`。
+
+## Phase 3 Updates
+- LLM settings are stored in `chrome.storage.local` under `llmSettings` (baseUrl, apiKey, timeout, retry, rate limit). API keys remain local.
+- Feishu public link fetch is supported with caching (TTL + ETag) in `feishuPublicCache`.
+- Replay now returns replay/validation/assertion in a single result object with per-step logs and optional screenshots.
+- Report export supports JSON + Markdown summaries with diff vs last report, keeping export history capped at 20 items.
+- One-click Baidu sample flow loads steps and runs replay + validation.

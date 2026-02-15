@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { parseMarkdown } from '../parser/markdown.js';
 import { parseMindmap } from '../parser/mindmap.js';
-import { getDocIdFromInput, fetchDoc } from '../feishu.js';
+import { getDocIdFromInput, fetchDoc, fetchPublicDoc } from '../feishu.js';
 import { assemblePrompt } from '../prompt/assembler.js';
 import { assembleUnifiedOutput } from '../prompt/unified.js';
 import { executePlan } from '../executor/executor.js';
@@ -11,7 +11,7 @@ import { validate as uiValidate } from '../validators/uiValidator.js';
 import { validate as textValidate } from '../validators/textValidator.js';
 import { validate as dataValidate } from '../validators/dataValidator.js';
 import { buildValidationResultPlaceholder } from '../validators/resultPlaceholder.js';
-import { run as runValidatorEngine } from '../validators/engine.js';
+import { diffReports, formatReportMarkdown } from '../report/report.js';
 
 const SidePanel = () => {
   const [steps, setSteps] = useState([]);
@@ -38,7 +38,20 @@ const SidePanel = () => {
   const EXPORT_HISTORY_MAX = 20;
 
   const defaultModelConfig = { model: 'gpt-4o', temperature: 0.2, max_tokens: 2048 };
+  const defaultLlmSettings = {
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: '',
+    timeoutMs: 30000,
+    retry: 2,
+    retryBaseMs: 500,
+    retryMaxMs: 8000,
+    rateLimitPerMin: 60
+  };
   const [modelConfig, setModelConfig] = useState(defaultModelConfig);
+  const [llmSettings, setLlmSettings] = useState(defaultLlmSettings);
+  const [llmLoading, setLlmLoading] = useState(false);
+  const [llmResult, setLlmResult] = useState('');
+  const [llmError, setLlmError] = useState('');
   const [feishuText, setFeishuText] = useState('');
   const [feishuDocTokenOrUrl, setFeishuDocTokenOrUrl] = useState('');
   const [feishuDocJson, setFeishuDocJson] = useState(null);
@@ -54,6 +67,11 @@ const SidePanel = () => {
   const [stepsImportMode, setStepsImportMode] = useState('replace'); // 'replace' | 'append'
   const [stepsImportDedup, setStepsImportDedup] = useState(false);
   const [stepsImportStatus, setStepsImportStatus] = useState('');
+  const [replayOptions, setReplayOptions] = useState({
+    captureScreenshots: false,
+    captureOnFailure: true
+  });
+  const [lastRunResult, setLastRunResult] = useState(null);
 
   const defaultSettings = {
     enabled: true,
@@ -66,7 +84,7 @@ const SidePanel = () => {
 
   useEffect(() => {
     // 1. Load initial state from storage
-    chrome.storage.local.get(['recorded_steps', 'settings', 'modelConfig', 'feishuConfig', 'exportHistory'], (result) => {
+    chrome.storage.local.get(['recorded_steps', 'settings', 'modelConfig', 'feishuConfig', 'exportHistory', 'llmSettings'], (result) => {
       if (result.recorded_steps && Array.isArray(result.recorded_steps)) {
         setSteps(result.recorded_steps);
       }
@@ -75,6 +93,9 @@ const SidePanel = () => {
       }
       if (result.modelConfig) {
         setModelConfig({ ...defaultModelConfig, ...result.modelConfig });
+      }
+      if (result.llmSettings) {
+        setLlmSettings({ ...defaultLlmSettings, ...result.llmSettings });
       }
       if (result.feishuConfig) {
         setFeishuConfig({ ...defaultFeishuConfig, ...result.feishuConfig });
@@ -115,6 +136,11 @@ const SidePanel = () => {
     chrome.storage.local.set({ modelConfig: next });
   };
 
+  const saveLlmSettings = (next) => {
+    setLlmSettings(next);
+    chrome.storage.local.set({ llmSettings: next });
+  };
+
   const saveFeishuConfig = (next) => {
     setFeishuConfig(next);
     chrome.storage.local.set({ feishuConfig: next });
@@ -143,6 +169,146 @@ const SidePanel = () => {
       }
     }
     return out;
+  };
+
+  const applyReplayResult = (res) => {
+    setExecReport(res.report)
+    setValidationResult(res.validationResult)
+    setAssertionResult(res.assertionResult)
+    setLastRunResult(res.result || null)
+    setExecStatus(res.ok ? 'DONE' : 'FAIL')
+  };
+
+  const buildBaiduSampleSteps = () => {
+    const url = 'https://www.baidu.com/';
+    return [
+      {
+        type: 'click',
+        target: '#kw',
+        selector: { css: '#kw', xpath: '//*[@id="kw"]' },
+        tag: 'input',
+        text: '',
+        timestamp: Date.now(),
+        url
+      },
+      {
+        type: 'input',
+        target: '#kw',
+        selector: { css: '#kw', xpath: '//*[@id="kw"]' },
+        tag: 'input',
+        value: 'OpenAI',
+        timestamp: Date.now(),
+        url
+      },
+      {
+        type: 'click',
+        target: '#su',
+        selector: { css: '#su', xpath: '//*[@id="su"]' },
+        tag: 'input',
+        text: '????',
+        timestamp: Date.now(),
+        url
+      }
+    ];
+  };
+
+  const waitForTabComplete = (tabId, timeoutMs = 15000) => new Promise((resolve) => {
+    const start = Date.now();
+    const listener = (id, info) => {
+      if (id === tabId && info.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve(true);
+      }
+      if (Date.now() - start > timeoutMs) {
+        chrome.tabs.onUpdated.removeListener(listener);
+        resolve(false);
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+
+  const getLastReportFromHistory = (history) => {
+    const list = Array.isArray(history) ? history : [];
+    return list.find((item) => item.kind === 'report' && item.report) || null;
+  };
+
+  const exportReport = (format) => {
+    if (!lastRunResult) {
+      setExportHistoryCopyStatus('No report to export');
+      return;
+    }
+    const ts = new Date();
+    const diff = diffReports(getLastReportFromHistory(exportHistory)?.report, lastRunResult);
+    const payload = { report: lastRunResult, diff, exportedAt: ts.toISOString() };
+    const content = format === 'json'
+      ? JSON.stringify(payload, null, 2)
+      : formatReportMarkdown(lastRunResult, diff);
+
+    const stamp = `${ts.getFullYear()}${String(ts.getMonth() + 1).padStart(2, '0')}${String(ts.getDate()).padStart(2, '0')}_${String(ts.getHours()).padStart(2, '0')}${String(ts.getMinutes()).padStart(2, '0')}${String(ts.getSeconds()).padStart(2, '0')}`;
+    const filename = `report_${stamp}.${format === 'json' ? 'json' : 'md'}`;
+    const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    const next = [
+      { id: Date.now(), timestamp: ts.toISOString(), content, kind: 'report', format, report: lastRunResult, diff },
+      ...exportHistory
+    ].slice(0, EXPORT_HISTORY_MAX);
+    setExportHistory(next);
+    chrome.storage.local.set({ exportHistory: next });
+  };
+
+  const runBaiduSample = async () => {
+    const sample = buildBaiduSampleSteps();
+    setSteps(sample);
+    chrome.storage.local.set({ recorded_steps: sample });
+    setExecStatus('RUNNING');
+    setExecReport(null);
+    setValidationResult(null);
+    setAssertionResult(null);
+    setLastRunResult(null);
+    const tab = await chrome.tabs.create({ url: 'https://www.baidu.com/' });
+    if (tab?.id) {
+      await waitForTabComplete(tab.id);
+      const res = await executePlan(sample, tab.id, { ...replayOptions, assertionTemplate: assertTemplateCache || "" });
+      applyReplayResult(res);
+    } else {
+      setExecStatus('FAIL');
+    }
+  };
+
+  const runLlm = async () => {
+    const prompt = promptText || '';
+    if (!prompt.trim()) {
+      setLlmError('Prompt 为空，无法调用 LLM');
+      return;
+    }
+    setLlmLoading(true);
+    setLlmError('');
+    setLlmResult('');
+    try {
+      chrome.runtime.sendMessage({ action: 'LLM_CALL', prompt }, (res) => {
+        if (!res) {
+          setLlmError('LLM 无响应');
+          setLlmLoading(false);
+          return;
+        }
+        if (!res.ok) {
+          setLlmError(`${res.error?.type || 'error'}: ${res.error?.message || 'Unknown error'}`);
+          setLlmLoading(false);
+          return;
+        }
+        setLlmResult(res.content || '');
+        setLlmLoading(false);
+      });
+    } catch (e) {
+      setLlmError(String(e?.message || e));
+      setLlmLoading(false);
+    }
   };
 
   /** 导出统一输出为带时间戳的文件，并写入 exportHistory（最近 N 条） */
@@ -174,7 +340,7 @@ const SidePanel = () => {
     URL.revokeObjectURL(url);
 
     const next = [
-      { id: Date.now(), timestamp: ts.toISOString(), content },
+      { id: Date.now(), timestamp: ts.toISOString(), content, kind: 'unified', format: 'txt' },
       ...exportHistory
     ].slice(0, EXPORT_HISTORY_MAX);
     setExportHistory(next);
@@ -241,6 +407,74 @@ const SidePanel = () => {
         </label>
       </div>
 
+      <h2>LLM Settings</h2>
+      <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+        <label>
+          Base URL
+          <input
+            type="text"
+            value={llmSettings.baseUrl}
+            style={{ width: '100%', marginLeft: '6px' }}
+            onChange={(e) => saveLlmSettings({ ...llmSettings, baseUrl: e.target.value })}
+          />
+        </label>
+        <label>
+          API Key
+          <input
+            type="password"
+            value={llmSettings.apiKey}
+            style={{ width: '100%', marginLeft: '6px' }}
+            onChange={(e) => saveLlmSettings({ ...llmSettings, apiKey: e.target.value })}
+          />
+        </label>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label>
+            Timeout(ms)
+            <input
+              type="number"
+              value={llmSettings.timeoutMs}
+              style={{ width: '100px', marginLeft: '6px' }}
+              onChange={(e) => saveLlmSettings({ ...llmSettings, timeoutMs: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label>
+            Retry
+            <input
+              type="number"
+              value={llmSettings.retry}
+              style={{ width: '80px', marginLeft: '6px' }}
+              onChange={(e) => saveLlmSettings({ ...llmSettings, retry: Number(e.target.value) || 0 })}
+            />
+          </label>
+          <label>
+            Rate Limit/min
+            <input
+              type="number"
+              value={llmSettings.rateLimitPerMin}
+              style={{ width: '100px', marginLeft: '6px' }}
+              onChange={(e) => saveLlmSettings({ ...llmSettings, rateLimitPerMin: Number(e.target.value) || 0 })}
+            />
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            style={{ cursor: 'pointer', padding: '4px 8px' }}
+            onClick={runLlm}
+            disabled={llmLoading}
+          >
+            {llmLoading ? 'LLM Calling...' : 'Call LLM'}
+          </button>
+          <span style={{ fontSize: '12px', color: '#c00' }}>{llmError}</span>
+        </div>
+        <textarea
+          value={llmResult}
+          readOnly
+          rows={4}
+          style={{ width: '100%', fontSize: '12px', padding: '8px', boxSizing: 'border-box' }}
+          placeholder="LLM response will appear here..."
+        />
+      </div>
+
       <h2>录制配置</h2>
       <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
         <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -305,6 +539,7 @@ const SidePanel = () => {
       <h2>录制步骤 ({steps.length})</h2>
       <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={handleClear} style={{ cursor: 'pointer', padding: '4px 8px' }}>清空记录</button>
+        <button onClick={runBaiduSample} style={{ cursor: 'pointer', padding: '4px 8px' }}>Baidu Sample</button>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
           <input
             type="file"
@@ -464,20 +699,36 @@ const SidePanel = () => {
             }
             setFeishuLoading(true);
             setFeishuError('');
-            const result = await fetchDoc({
-              accessToken: feishuConfig.accessToken,
-              docId,
-              apiBase: feishuConfig.apiBase || undefined
-            });
+            let result = null;
+            if (feishuConfig.accessToken) {
+              result = await fetchDoc({
+                accessToken: feishuConfig.accessToken,
+                docId,
+                apiBase: feishuConfig.apiBase || undefined
+              });
+              if (!result.ok) {
+                const fallback = await fetchPublicDoc({
+                  input: feishuDocTokenOrUrl,
+                  apiBase: feishuConfig.apiBase || undefined
+                });
+                if (fallback.ok) result = fallback;
+              }
+            } else {
+              result = await fetchPublicDoc({
+                input: feishuDocTokenOrUrl,
+                apiBase: feishuConfig.apiBase || undefined
+              });
+            }
             setFeishuLoading(false);
             if (result.ok) {
               setFeishuDocJson(result.docJson);
               setDocSource('feishu');
-              setFeishuText(JSON.stringify(result.docJson, null, 2));
+              setFeishuText(result.text ? String(result.text) : JSON.stringify(result.docJson, null, 2));
             } else {
-              setFeishuError(result.error || '拉取失败');
+              setFeishuError(result.error || '??????????????????');
             }
-          }}
+          }
+        }
         >
           {feishuLoading ? '拉取中…' : '拉取'}
         </button>
@@ -796,7 +1047,8 @@ const SidePanel = () => {
               }}
             >
               <span style={{ fontSize: '12px', color: '#333' }}>
-                {item.timestamp ? new Date(item.timestamp).toLocaleString('zh-CN') : '—'}
+                {item.timestamp ? new Date(item.timestamp).toLocaleString('zh-CN') : 'N/A'}
+                {item.kind ? ` (${item.kind}${item.format ? `:${item.format}` : ''})` : ''}
               </span>
               <button
                 style={{ cursor: 'pointer', padding: '2px 8px', fontSize: '12px' }}
@@ -880,25 +1132,50 @@ const SidePanel = () => {
       <p style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
         在目标网页激活时点击「真实执行」，将在当前标签页回放步骤并执行 ui/text/data 校验。
       </p>
+      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', marginBottom: '8px' }}>
+        <label style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={replayOptions.captureScreenshots}
+            onChange={(e) => setReplayOptions({ ...replayOptions, captureScreenshots: e.target.checked })}
+          />
+          Capture Screenshots
+        </label>
+        <label style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={replayOptions.captureOnFailure}
+            onChange={(e) => setReplayOptions({ ...replayOptions, captureOnFailure: e.target.checked })}
+          />
+          Only On Failure
+        </label>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => exportReport('json')}
+        >
+          Export Report JSON
+        </button>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => exportReport('markdown')}
+        >
+          Export Report Markdown
+        </button>
+      </div>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+
         <button
           style={{ cursor: 'pointer', padding: '6px 12px' }}
           onClick={async () => {
             setExecStatus('RUNNING')
             setExecReport(null)
             setValidationResult(null)
+            setAssertionResult(null)
+            setLastRunResult(null)
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => [])
-            const res = await executePlan(steps, tab?.id)
-            setExecReport(res.report)
-            setValidationResult(res.validationResult)
-            setExecStatus(res.ok ? 'DONE' : 'FAIL')
-            const assertRes = assertPlan({
-              steps,
-              execReport: res.report,
-              validateResult: res.validationResult ?? null,
-              assertionTemplate: assertTemplateCache || ''
-            })
-            setAssertionResult(assertRes)
+            const res = await executePlan(steps, tab?.id, { ...replayOptions, assertionTemplate: assertTemplateCache || "" })
+            applyReplayResult(res)
+
           }}
         >
           真实执行
@@ -917,7 +1194,7 @@ const SidePanel = () => {
             <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0' }}>
               {execReport.logs.map((log, i) => (
                 <li key={i} style={{ padding: '4px 0', borderBottom: '1px solid #eee', color: log.status === 'OK' ? '#080' : log.status === 'FAIL' ? '#c00' : '#666' }}>
-                  {log.index}. {log.status} {log.note ? `— ${log.note}` : ''}
+                  {log.index}. {log.status} {log.note ? `— ${log.note}` : ''} {log.screenshotId ? ` [${log.screenshotId}]` : ''}
                 </li>
               ))}
             </ul>

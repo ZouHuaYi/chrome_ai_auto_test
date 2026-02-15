@@ -9,8 +9,9 @@ function assertPlan(context = {}) {
   const issues = []
 
   // 1. 执行结果：每步 FAIL 或非 OK 记为一条断言失败
-  if (execReport?.report?.logs) {
-    for (const log of execReport.report.logs) {
+  const execLogs = execReport?.report?.logs || execReport?.logs || []
+  if (execLogs.length) {
+    for (const log of execLogs) {
       const passed = log.status === 'OK' || log.status === 'SIMULATED'
       if (!passed) {
         issues.push({

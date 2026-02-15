@@ -39,12 +39,35 @@ function resolveElement(doc, step) {
   return null
 }
 
-function executeOneStep(doc, step, index) {
-  const log = { index: index + 1, step, status: 'FAIL', note: '' }
+async function requestScreenshot() {
+  if (!chrome?.runtime?.sendMessage) return null
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(null), 2000)
+    try {
+      chrome.runtime.sendMessage({ action: 'CAPTURE_SCREENSHOT' }, (res) => {
+        clearTimeout(timeout)
+        resolve(res?.ok ? res.dataUrl : null)
+      })
+    } catch (_) {
+      clearTimeout(timeout)
+      resolve(null)
+    }
+  })
+}
+
+async function executeOneStep(doc, step, index, options = {}) {
+  const log = {
+    id: `log_${Date.now()}_${index + 1}`,
+    index: index + 1,
+    step,
+    status: 'FAIL',
+    note: '',
+    timestamp: Date.now()
+  }
   if (step.type === 'network') {
     log.status = 'SKIP'
     log.note = 'network step skipped in replay'
-    return log
+    return { log, screenshotId: null, screenshotDataUrl: null }
   }
 
   if (step.type === 'scroll') {
@@ -57,13 +80,13 @@ function executeOneStep(doc, step, index) {
     } catch (e) {
       log.note = String(e?.message || e)
     }
-    return log
+    return { log, screenshotId: null, screenshotDataUrl: null }
   }
 
   const el = resolveElement(doc, step)
   if (!el) {
     log.note = 'element not found'
-    return log
+    return { log, screenshotId: null, screenshotDataUrl: null }
   }
 
   try {
@@ -90,7 +113,17 @@ function executeOneStep(doc, step, index) {
   } catch (e) {
     log.note = String(e?.message || e)
   }
-  return log
+  let screenshotId = null
+  let screenshotDataUrl = null
+  const captureScreenshots = options.captureScreenshots === true
+  const captureOnFailure = options.captureOnFailure === true
+  const shouldCapture = captureScreenshots && (!captureOnFailure || log.status === 'FAIL')
+  if (shouldCapture) {
+    screenshotId = `ss_${Date.now()}_${index + 1}`
+    screenshotDataUrl = await requestScreenshot()
+  }
+  if (screenshotId) log.screenshotId = screenshotId
+  return { log, screenshotId, screenshotDataUrl }
 }
 
 /**
@@ -99,19 +132,24 @@ function executeOneStep(doc, step, index) {
  * @param {Array} steps - 与 recorder 一致的 step 数组
  * @returns {{ ok: boolean, report: { executed: number, logs: Array } }}
  */
-function runReplay(doc, steps = []) {
+async function runReplay(doc, steps = [], options = {}) {
   const docRef = doc || (typeof document !== 'undefined' ? document : null)
   if (!docRef) {
     return {
       ok: false,
-      report: { executed: 0, logs: [] }
+      report: { executed: 0, logs: [] },
+      screenshots: {}
     }
   }
   const logs = []
+  const screenshots = {}
   const list = Array.isArray(steps) ? steps : []
   for (let i = 0; i < list.length; i++) {
-    const log = executeOneStep(docRef, list[i], i)
-    logs.push(log)
+    const result = await executeOneStep(docRef, list[i], i, options)
+    logs.push(result.log)
+    if (result.screenshotId && result.screenshotDataUrl) {
+      screenshots[result.screenshotId] = result.screenshotDataUrl
+    }
   }
   const ok = logs.every((l) => l.status !== 'FAIL')
   return {
@@ -119,7 +157,8 @@ function runReplay(doc, steps = []) {
     report: {
       executed: logs.length,
       logs
-    }
+    },
+    screenshots
   }
 }
 

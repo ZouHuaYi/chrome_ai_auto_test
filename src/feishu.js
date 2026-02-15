@@ -1,31 +1,60 @@
-/**
- * 飞书文档拉取（无额外依赖，仅 fetch）
- * 可配置：accessToken、docId/链接、apiBase
- */
+﻿import { parseMarkdown } from './parser/markdown.js';
 
 const DEFAULT_API_BASE = 'https://open.feishu.cn/open-apis';
+const PUBLIC_CACHE_KEY = 'feishuPublicCache';
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 
-/**
- * 从输入中解析文档 ID：支持完整链接或纯 Token（如 doccnXXX）
- * @param {string} input - 飞书文档链接或 document_id
- * @returns {string|null}
- */
+const memoryCache = {
+  [PUBLIC_CACHE_KEY]: {}
+};
+
+function hasChromeStorage() {
+  return typeof chrome !== 'undefined' && chrome.storage?.local;
+}
+
+function storageGet(key) {
+  if (hasChromeStorage()) {
+    return chrome.storage.local.get([key]).then((res) => res[key]);
+  }
+  if (typeof localStorage !== 'undefined') {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  }
+  return Promise.resolve(memoryCache[key] || null);
+}
+
+function storageSet(key, value) {
+  if (hasChromeStorage()) {
+    return chrome.storage.local.set({ [key]: value });
+  }
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(key, JSON.stringify(value));
+    return Promise.resolve();
+  }
+  memoryCache[key] = value;
+  return Promise.resolve();
+}
+
 export function getDocIdFromInput(input) {
   if (!input || typeof input !== 'string') return null;
   const trimmed = input.trim();
   if (!trimmed) return null;
-  // 链接形式: https://xxx.feishu.cn/docx/XXXXX 或 https://xxx.feishu.cn/doc/XXXXX
-  const urlMatch = trimmed.match(/\/docx?\/([a-zA-Z0-9]+)(?:\?|$|\/)/);
+  const urlMatch = trimmed.match(/\/docx?\/([a-zA-Z0-9_-]+)(?:\?|$|\/|#)/);
   if (urlMatch) return urlMatch[1];
-  // 纯 Token
+  const wikiMatch = trimmed.match(/\/wiki\/([a-zA-Z0-9_-]+)(?:\?|$|\/|#)/);
+  if (wikiMatch) return wikiMatch[1];
+  const queryMatch = trimmed.match(/[?&](docId|doc_id|docToken|doc_token)=([a-zA-Z0-9_-]+)/i);
+  if (queryMatch) return queryMatch[2];
   return trimmed;
 }
 
-/**
- * 从飞书 block 中提取单行文本（paragraph/heading/bullet/ordered 的 elements[].text_run.text）
- * @param {object} block - 飞书 API 返回的 block 对象
- * @returns {string}
- */
+export function normalizePublicDocUrl(input, apiBase = DEFAULT_API_BASE) {
+  const docId = getDocIdFromInput(input);
+  if (!docId) return null;
+  const base = (apiBase || DEFAULT_API_BASE).replace(/\/$/, '');
+  return `${base}/docx/v1/documents/${encodeURIComponent(docId)}/raw_content`;
+}
+
 function getBlockText(block) {
   if (!block) return '';
   const type = block.block_type;
@@ -37,16 +66,11 @@ function getBlockText(block) {
     .trim();
 }
 
-/**
- * 将飞书 blocks 转为与 Markdown 解析一致的 docJson（heading/paragraph/list）
- * @param {Array} blocks - 飞书 /blocks 接口返回的 block 列表
- * @returns {{ type: 'document', children: Array }}
- */
 export function feishuBlocksToDocJson(blocks) {
   const doc = { type: 'document', children: [] };
   if (!Array.isArray(blocks) || blocks.length === 0) return doc;
 
-  let listBuffer = null; // { type: 'list', ordered: boolean, items: string[] }
+  let listBuffer = null;
 
   function flushList() {
     if (listBuffer && listBuffer.items.length > 0) {
@@ -59,7 +83,6 @@ export function feishuBlocksToDocJson(blocks) {
     const blockType = block.block_type || '';
     const text = getBlockText(block);
 
-    // 标题 heading1 ~ heading9
     const headingMatch = blockType.match(/^heading(\d)$/);
     if (headingMatch) {
       flushList();
@@ -68,7 +91,6 @@ export function feishuBlocksToDocJson(blocks) {
       continue;
     }
 
-    // 无序列表
     if (blockType === 'bullet' || blockType === 'unordered') {
       if (!listBuffer || listBuffer.ordered) {
         flushList();
@@ -78,7 +100,6 @@ export function feishuBlocksToDocJson(blocks) {
       continue;
     }
 
-    // 有序列表
     if (blockType === 'ordered') {
       if (!listBuffer || !listBuffer.ordered) {
         flushList();
@@ -88,14 +109,12 @@ export function feishuBlocksToDocJson(blocks) {
       continue;
     }
 
-    // 段落、代码块、引用等按段落
     if (blockType === 'paragraph' || blockType === 'text' || blockType === 'code' || blockType === 'quote') {
       flushList();
       if (text) doc.children.push({ type: 'paragraph', text });
       continue;
     }
 
-    // 其他类型忽略或当段落
     if (text) {
       flushList();
       doc.children.push({ type: 'paragraph', text });
@@ -106,15 +125,10 @@ export function feishuBlocksToDocJson(blocks) {
   return doc;
 }
 
-/**
- * 拉取飞书文档并返回 docJson
- * @param {{ accessToken: string, docId: string, apiBase?: string }} config
- * @returns {Promise<{ ok: boolean, docJson?: object, error?: string }>}
- */
 export async function fetchDoc(config) {
   const { accessToken, docId, apiBase = DEFAULT_API_BASE } = config || {};
   if (!accessToken || !docId) {
-    return { ok: false, error: '请配置 Access Token 与文档 ID/链接' };
+    return { ok: false, error: 'Missing Access Token or document ID' };
   }
 
   const base = (apiBase || '').replace(/\/$/, '');
@@ -133,7 +147,7 @@ export async function fetchDoc(config) {
 
     if (!res.ok) {
       const msg = data.msg || data.error_description || data.message || res.statusText;
-      return { ok: false, error: `请求失败 ${res.status}: ${msg}` };
+      return { ok: false, error: `Fetch failed ${res.status}: ${msg}` };
     }
 
     if (data.code !== undefined && data.code !== 0) {
@@ -145,6 +159,82 @@ export async function fetchDoc(config) {
     return { ok: true, docJson };
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
-    return { ok: false, error: `网络或解析错误: ${msg}` };
+    return { ok: false, error: `Network error: ${msg}` };
+  }
+}
+
+async function getPublicCache(docId) {
+  const cache = (await storageGet(PUBLIC_CACHE_KEY)) || {};
+  const entry = cache[docId] || null;
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt > (entry.ttlMs || DEFAULT_CACHE_TTL_MS)) {
+    return { ...entry, expired: true };
+  }
+  return entry;
+}
+
+async function setPublicCache(docId, entry) {
+  const cache = (await storageGet(PUBLIC_CACHE_KEY)) || {};
+  cache[docId] = entry;
+  await storageSet(PUBLIC_CACHE_KEY, cache);
+}
+
+function buildDocJsonFromText(text) {
+  if (!text) return { type: 'document', children: [] };
+  try {
+    return parseMarkdown(text);
+  } catch (_) {
+    return {
+      type: 'document',
+      children: [{ type: 'paragraph', text: String(text) }]
+    };
+  }
+}
+
+export async function fetchPublicDoc(config) {
+  const { input, apiBase = DEFAULT_API_BASE, cacheTtlMs = DEFAULT_CACHE_TTL_MS } = config || {};
+  const docId = getDocIdFromInput(input || '');
+  if (!docId) {
+    return { ok: false, error: 'Missing document ID or public link' };
+  }
+
+  const cached = await getPublicCache(docId);
+  if (cached && !cached.expired) {
+    return { ok: true, docJson: cached.docJson, text: cached.text, cached: true };
+  }
+
+  const url = normalizePublicDocUrl(docId, apiBase);
+  const headers = {};
+  if (cached?.etag) headers['If-None-Match'] = cached.etag;
+
+  try {
+    const res = await fetch(url, { method: 'GET', headers });
+    if (res.status === 304 && cached) {
+      await setPublicCache(docId, { ...cached, fetchedAt: Date.now(), ttlMs: cacheTtlMs });
+      return { ok: true, docJson: cached.docJson, text: cached.text, cached: true };
+    }
+    const etag = res.headers.get('etag') || '';
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg = data?.msg || data?.message || res.statusText;
+      return { ok: false, error: `Public fetch failed ${res.status}: ${msg}` };
+    }
+    const rawText =
+      data?.data?.content ||
+      data?.data?.markdown ||
+      data?.data?.raw_content ||
+      '';
+    const docJson = buildDocJsonFromText(rawText);
+    await setPublicCache(docId, {
+      docJson,
+      text: rawText,
+      etag,
+      fetchedAt: Date.now(),
+      ttlMs: cacheTtlMs
+    });
+    return { ok: true, docJson, text: rawText };
+  } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
+    return { ok: false, error: `Public fetch error: ${msg}` };
   }
 }

@@ -292,26 +292,69 @@ window.addEventListener('scroll', handleScroll, { passive: true })
 // --- REPLAY：真实执行步骤并在当前页执行校验 ---
 import { runReplay } from './replay.js'
 import { run as runValidatorEngine } from '../validators/engine.js'
+import { assertPlan } from '../assertions/assertor.js'
 
-function handleReplay(message, sendResponse) {
+async function handleReplay(message, sendResponse) {
   const steps = message?.steps
+  const assertionTemplate = message?.assertionTemplate || ''
+  const replayOptions = message?.options || {}
   if (!Array.isArray(steps) || steps.length === 0) {
-    sendResponse?.({ ok: true, report: { executed: 0, logs: [] }, validationResult: null })
+    sendResponse?.({
+      ok: true,
+      report: { executed: 0, logs: [] },
+      validationResult: null,
+      assertionResult: { ok: true, issues: [] },
+      result: {
+        ok: true,
+        replay: { ok: true, report: { executed: 0, logs: [] }, screenshots: {} },
+        validation: { status: 'PASS', issues: [] },
+        assertion: { ok: true, issues: [] },
+        screenshots: {},
+        meta: { startedAt: Date.now(), finishedAt: Date.now(), durationMs: 0 }
+      }
+    })
     return
   }
   try {
-    const result = runReplay(document, steps)
+    const startedAt = Date.now()
+    const replayResult = await runReplay(document, steps, replayOptions)
     const validationResult = runValidatorEngine({ steps, document }).result
+    const assertionResult = assertPlan({
+      steps,
+      execReport: replayResult,
+      validateResult: validationResult,
+      assertionTemplate
+    })
+    const finishedAt = Date.now()
+    const finalResult = {
+      ok: replayResult.ok && validationResult.status === 'PASS' && assertionResult.ok,
+      replay: replayResult,
+      validation: validationResult,
+      assertion: assertionResult,
+      screenshots: replayResult.screenshots || {},
+      meta: { startedAt, finishedAt, durationMs: finishedAt - startedAt }
+    }
     sendResponse?.({
-      ok: result.ok,
-      report: result.report,
-      validationResult
+      ok: finalResult.ok,
+      report: replayResult.report,
+      validationResult,
+      assertionResult,
+      result: finalResult
     })
   } catch (e) {
     sendResponse?.({
       ok: false,
       report: { executed: 0, logs: [{ status: 'FAIL', note: String(e?.message || e) }] },
-      validationResult: { status: 'FAIL', issues: [{ kind: 'error', message: String(e?.message || e) }] }
+      validationResult: { status: 'FAIL', issues: [{ kind: 'error', message: String(e?.message || e) }] },
+      assertionResult: { ok: false, issues: [{ expected: 'Replay success', actual: String(e?.message || e), passed: false, reason: 'Replay error' }] },
+      result: {
+        ok: false,
+        replay: { ok: false, report: { executed: 0, logs: [] }, screenshots: {} },
+        validation: { status: 'FAIL', issues: [{ kind: 'error', message: String(e?.message || e) }] },
+        assertion: { ok: false, issues: [{ expected: 'Replay success', actual: String(e?.message || e), passed: false, reason: 'Replay error' }] },
+        screenshots: {},
+        meta: { startedAt: Date.now(), finishedAt: Date.now(), durationMs: 0 }
+      }
     })
   }
 }
