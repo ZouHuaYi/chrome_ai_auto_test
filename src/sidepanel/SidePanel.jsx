@@ -34,6 +34,9 @@ const SidePanel = () => {
   const [feishuText, setFeishuText] = useState('');
   const [mindmapText, setMindmapText] = useState('');
   const [importStatus, setImportStatus] = useState('');
+  const [stepsImportMode, setStepsImportMode] = useState('replace'); // 'replace' | 'append'
+  const [stepsImportDedup, setStepsImportDedup] = useState(false);
+  const [stepsImportStatus, setStepsImportStatus] = useState('');
 
   const defaultSettings = {
     enabled: true,
@@ -87,6 +90,41 @@ const SidePanel = () => {
   const saveModelConfig = (next) => {
     setModelConfig(next);
     chrome.storage.local.set({ modelConfig: next });
+  };
+
+  /** 同 target 同 type 的连续步骤合并为一条（保留第一条） */
+  const dedupSteps = (stepList) => {
+    if (!Array.isArray(stepList) || stepList.length === 0) return stepList;
+    const out = [];
+    for (const s of stepList) {
+      const key = `${s.type ?? ''}\0${s.target ?? ''}`;
+      if (out.length === 0 || `${out[out.length - 1].type}\0${out[out.length - 1].target}` !== key) {
+        out.push(s);
+      }
+    }
+    return out;
+  };
+
+  const handleImportSteps = (file, replace, dedup) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const raw = String(reader.result || '');
+        const parsed = JSON.parse(raw);
+        const list = Array.isArray(parsed) ? parsed : (parsed?.steps && Array.isArray(parsed.steps) ? parsed.steps : []);
+        let next = replace ? list : [...steps, ...list];
+        if (dedup) next = dedupSteps(next);
+        setSteps(next);
+        chrome.storage.local.set({ recorded_steps: next }, () => {
+          setStepsImportStatus(`已${replace ? '替换' : '追加'}，共 ${next.length} 条${dedup ? '（已去重）' : ''}`);
+        });
+      } catch (e) {
+        setStepsImportStatus('导入失败：非合法 JSON 或格式不符');
+      }
+    };
+    reader.onerror = () => setStepsImportStatus('读取文件失败');
+    reader.readAsText(file);
   };
 
   return (
@@ -189,25 +227,66 @@ const SidePanel = () => {
       </div>
 
       <h2>录制步骤 ({steps.length})</h2>
-      <div style={{ marginBottom: '16px' }}>
+      <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button onClick={handleClear} style={{ cursor: 'pointer', padding: '4px 8px' }}>清空记录</button>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+          <input
+            type="file"
+            accept=".json,application/json"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImportSteps(file, stepsImportMode === 'replace', stepsImportDedup);
+              e.target.value = '';
+            }}
+          />
+          导入 Steps
+        </label>
+        <label style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+          <select
+            value={stepsImportMode}
+            onChange={(e) => setStepsImportMode(e.target.value)}
+            style={{ padding: '2px 6px' }}
+          >
+            <option value="replace">替换</option>
+            <option value="append">追加</option>
+          </select>
+        </label>
+        <label style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+          <input
+            type="checkbox"
+            checked={stepsImportDedup}
+            onChange={(e) => setStepsImportDedup(e.target.checked)}
+          />
+          去重
+        </label>
+        <span style={{ fontSize: '12px', color: '#666' }}>{stepsImportStatus}</span>
       </div>
       <ul style={{ listStyle: 'none', padding: 0 }}>
         {steps.map((step, index) => (
-          <li key={index} style={{ 
-            marginBottom: '8px', 
-            padding: '8px', 
-            background: '#f4f4f4', 
+          <li key={index} style={{
+            marginBottom: '8px',
+            padding: '8px',
+            background: step.type === 'network' ? '#e8f4fc' : '#f4f4f4',
             borderRadius: '4px',
             fontSize: '12px',
             wordBreak: 'break-all'
           }}>
-            <div style={{ fontWeight: 'bold', color: '#333' }}>
-              {index + 1}. {step.type.toUpperCase()}
+            <div style={{ fontWeight: 'bold', color: step.type === 'network' ? '#0a5a8a' : '#333' }}>
+              {index + 1}. {String(step.type || 'unknown').toUpperCase()}
             </div>
-            <div style={{ color: '#666', marginTop: '4px' }}>{step.target}</div>
-            {step.value && <div style={{ color: '#0056b3', marginTop: '2px' }}>值: {step.value}</div>}
-            {step.text && <div style={{ color: '#0056b3', marginTop: '2px' }}>文本: {step.text}</div>}
+            {step.type === 'network' ? (
+              <div style={{ color: '#666', marginTop: '4px' }}>
+                <span style={{ marginRight: '8px' }}><strong>method:</strong> {step.method ?? '—'}</span>
+                <span style={{ marginRight: '8px' }}><strong>url:</strong> {step.url ?? step.target ?? '—'}</span>
+                <span><strong>status:</strong> {step.statusCode ?? '—'}</span>
+              </div>
+            ) : (
+              <>
+                <div style={{ color: '#666', marginTop: '4px' }}>{step.target}</div>
+                {step.value != null && <div style={{ color: '#0056b3', marginTop: '2px' }}>值: {step.value}</div>}
+                {step.text && <div style={{ color: '#0056b3', marginTop: '2px' }}>文本: {step.text}</div>}
+              </>
+            )}
           </li>
         ))}
       </ul>
@@ -325,7 +404,7 @@ const SidePanel = () => {
             } catch (e) {
               docJson = parseMarkdown(mdInput || '')
             }
-            const prompt = assemblePrompt({ steps, docJson })
+            const prompt = assemblePrompt({ steps, docJson, modelConfig })
             setPromptText(prompt)
           }}
         >
@@ -460,7 +539,7 @@ const SidePanel = () => {
             } catch (e) {
               docJson = parseMarkdown(mdInput || '')
             }
-            const prompt = assemblePrompt({ steps, docJson })
+            const prompt = assemblePrompt({ steps, docJson, modelConfig })
             const exec = executePlan(steps)
             const assertsPlan = {
               ui: uiValidate({ steps }),
@@ -482,7 +561,8 @@ const SidePanel = () => {
               planJson: { executor: exec, assertions: assertPlan({ steps }) },
               validateJson: assertsPlan || {},
               simulateJson: exec || {},
-              assertionTemplate: template || ''
+              assertionTemplate: template || '',
+              modelConfig
             })
             setUnifiedText(unified)
           }}
@@ -503,7 +583,8 @@ const SidePanel = () => {
               planJson,
               validateJson: validateJsonCache || {},
               simulateJson: simulateJsonCache || {},
-              assertionTemplate: assertTemplateCache || ''
+              assertionTemplate: assertTemplateCache || '',
+              modelConfig
             })
             setUnifiedText(unified)
           }}

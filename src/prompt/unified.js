@@ -3,12 +3,23 @@ function assembleUnifiedOutput({
   planJson = {},
   validateJson = {},
   simulateJson = {},
-  assertionTemplate = ''
+  assertionTemplate = '',
+  modelConfig
 } = {}) {
   const planSection = JSON.stringify(planJson, null, 2)
   const validateSection = JSON.stringify(validateJson, null, 2)
   const simulateSection = JSON.stringify(simulateJson, null, 2)
-  return [
+  const parts = []
+  if (modelConfig) {
+    parts.push(
+      '【LLM 参数】',
+      `model: ${modelConfig.model}`,
+      `temperature: ${modelConfig.temperature}`,
+      `max_tokens: ${modelConfig.max_tokens}`,
+      ''
+    )
+  }
+  parts.push(
     '【Prompt】',
     promptText || '（空）',
     '',
@@ -23,7 +34,8 @@ function assembleUnifiedOutput({
     '',
     '【断言模板】',
     assertionTemplate || '（空）'
-  ].join('\n')
+  )
+  return parts.join('\n')
 }
 
 export { assembleUnifiedOutput }
