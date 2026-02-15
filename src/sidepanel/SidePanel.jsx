@@ -1273,31 +1273,38 @@ const SidePanel = () => {
           </div>
         )}
         {assertionResult != null && (
-          <div style={{ marginTop: '12px', padding: '10px', background: assertionResult.ok ? '#f0f8f0' : '#fff0f0', borderRadius: '4px', border: `1px solid ${assertionResult.ok ? '#b0d0b0' : '#e0b0b0'}` }}>
-            <strong>断言结果：</strong>
-            <span style={{ color: assertionResult.ok ? '#080' : '#c00', marginLeft: '6px' }}>
-              {assertionResult.ok ? 'PASS' : 'FAIL'}
-            </span>
-            <span className={`badge ${assertionResult.ok ? 'pass' : 'fail'}`}>{assertionResult.ok ? 'PASS' : 'FAIL'}</span>
+          <details
+            style={{ marginTop: '12px', padding: '10px', background: assertionResult.ok ? '#f0f8f0' : '#fff0f0', borderRadius: '4px', border: `1px solid ${assertionResult.ok ? '#b0d0b0' : '#e0b0b0'}` }}
+            open={assertionResult.ok === false}
+          >
+            <summary style={{ fontWeight: 600 }}>
+              ??????????????????????
+              <span style={{ color: assertionResult.ok ? '#080' : '#c00', marginLeft: '6px' }}>
+                {assertionResult.ok ? 'PASS' : 'FAIL'}
+              </span>
+              <span className={`badge ${assertionResult.ok ? 'pass' : 'fail'}`}>{assertionResult.ok ? 'PASS' : 'FAIL'}</span>
+            </summary>
             {assertionResult.issues?.length > 0 ? (
               <details style={{ marginTop: '8px' }}>
                 <summary>Issues ({assertionResult.issues.length})</summary>
                 <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
                 {assertionResult.issues.map((issue, i) => (
                   <li key={i} style={{ padding: '6px 0', fontSize: '12px', borderBottom: '1px solid #eee' }}>
-                    <span style={{ color: issue.passed ? '#080' : '#c00' }}>{issue.passed ? '✓' : '✗'}</span>
+                    <span style={{ color: issue.passed ? '#080' : '#c00' }}>{issue.passed ? '???? : '????}</span>
                     {' '}
-                    <strong>预期：</strong>{issue.expected}
+                    <strong>?????????????/strong>{issue.expected}
                     {' | '}
-                    <strong>实际：</strong>{issue.actual}
+                    <strong>?????????????/strong>{issue.actual}
                     {issue.reason && <span style={{ color: '#666' }}> | {issue.reason}</span>}
                   </li>
                 ))}
                 </ul>
               </details>
             ) : (
-              <div style={{ marginTop: '6px', fontSize: '12px', color: '#666' }}>无具体条目（全部通过）</div>
+              <div style={{ marginTop: '6px', fontSize: '12px', color: '#666' }}>?????????????????????????????????????????????????/div>
             )}
+          </details>
+        )}
           </div>
         )}
       </div>
