@@ -381,14 +381,19 @@ const SidePanel = () => {
         .panel-root button:hover { background:#1E293B; border-color:#64748B; }
         .panel-root button:disabled { opacity:0.6; cursor:not-allowed; }
         .panel-root .btn-primary { background:#22C55E; border-color:#22C55E; color:#0B1220; font-weight:600; }
+        .panel-root .btn-secondary { background:#1F2937; border-color:#334155; color:#E2E8F0; }
         .panel-root .btn-danger { background:#EF4444; border-color:#EF4444; color:#fff; }
         .panel-root .badge { display:inline-block; padding:2px 6px; border-radius:6px; font-size:11px; margin-left:6px; }
         .panel-root .badge.pass { background:#16A34A; color:#fff; }
         .panel-root .badge.fail { background:#DC2626; color:#fff; }
         .panel-root .card { background:#0B1220; border:1px solid #1F2937; border-radius:12px; padding:12px; margin-bottom:12px; }
+        .panel-root details { background:#0B1220; border:1px solid #1F2937; border-radius:10px; padding:6px 8px; }
+        .panel-root details summary { cursor:pointer; font-weight:600; color:#E2E8F0; }
+        .panel-root details[open] summary { margin-bottom:6px; }
       `}</style>
       <h2>模型配置</h2>
-      <div className="card" style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+      <div className="card">
+        <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
         <label>
           Model：
           <input
@@ -421,10 +426,10 @@ const SidePanel = () => {
             }
           />
         </label>
-      </div>
+        </div>
 
-      <h2>LLM Settings</h2>
-      <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+        <h3 style={{ marginTop: 0 }}>LLM Settings</h3>
+        <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
         <label>
           Base URL
           <input
@@ -474,6 +479,7 @@ const SidePanel = () => {
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
+            className="btn-secondary"
             style={{ cursor: 'pointer', padding: '4px 8px' }}
             onClick={runLlm}
             disabled={llmLoading}
@@ -490,7 +496,9 @@ const SidePanel = () => {
           placeholder="LLM response will appear here..."
         />
       </div>
+      </div>
 
+      <div className="card">
       <h2>录制配置</h2>
       <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
         <label style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -554,8 +562,8 @@ const SidePanel = () => {
 
       <h2>录制步骤 ({steps.length})</h2>
       <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <button onClick={handleClear} style={{ cursor: 'pointer', padding: '4px 8px' }}>清空记录</button>
-        <button onClick={runBaiduSample} style={{ cursor: 'pointer', padding: '4px 8px' }}>Baidu Sample</button>
+        <button className="btn-danger" onClick={handleClear} style={{ cursor: 'pointer', padding: '4px 8px' }}>清空记录</button>
+        <button className="btn-secondary" onClick={runBaiduSample} style={{ cursor: 'pointer', padding: '4px 8px' }}>Baidu Sample</button>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
           <input
             type="file"
@@ -624,8 +632,11 @@ const SidePanel = () => {
         </div>
       )}
 
+      </div>
       <hr style={{ margin: '20px 0' }} />
 
+      <div className="card">
+      <h2 style={{ marginTop: 0 }}>Docs Import</h2>
       <h3 style={{ marginBottom: '8px' }}>Markdown 解析预览</h3>
       <textarea
         value={mdInput}
@@ -636,6 +647,7 @@ const SidePanel = () => {
       />
       <div style={{ margin: '8px 0', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const parsed = parseMarkdown(mdInput || '');
@@ -705,6 +717,7 @@ const SidePanel = () => {
       </div>
       <div style={{ marginBottom: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button
+          className="btn-primary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           disabled={feishuLoading}
           onClick={async () => {
@@ -768,6 +781,7 @@ const SidePanel = () => {
       />
       <div style={{ margin: '8px 0', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const result = parseMindmap(mindmapText);
@@ -821,9 +835,14 @@ const SidePanel = () => {
       >
         {docSource === 'md' ? (mdOutput || '解析结果将显示在这里...') : docSource === 'feishu' ? (feishuText || '拉取飞书后显示') : (mindmapDocJson ? JSON.stringify(mindmapDocJson, null, 2) : '解析思维导图后显示')}
       </pre>
+      </div>
+
+      <div className="card">
+      <h2 style={{ marginTop: 0 }}>Generate & Run</h2>
 
       <div style={{ marginTop: '12px' }}>
         <button
+          className="btn-primary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const docJson = getEffectiveDocJson()
@@ -851,6 +870,7 @@ const SidePanel = () => {
 
       <div style={{ marginTop: '12px' }}>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const exec = executePlan(steps)
@@ -881,6 +901,7 @@ const SidePanel = () => {
 
       <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const exec = executePlan(steps)
@@ -891,6 +912,7 @@ const SidePanel = () => {
           执行模拟
         </button>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const data = JSON.stringify(steps, null, 2)
@@ -922,6 +944,7 @@ const SidePanel = () => {
 
       <div style={{ marginTop: '12px' }}>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const docJson = getEffectiveDocJson()
@@ -949,6 +972,7 @@ const SidePanel = () => {
 
       <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button
+          className="btn-primary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const docJson = getEffectiveDocJson()
@@ -983,6 +1007,7 @@ const SidePanel = () => {
           一键生成全流程
         </button>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             let planJson = {}
@@ -1021,6 +1046,7 @@ const SidePanel = () => {
       />
       <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={async () => {
             try {
@@ -1033,12 +1059,14 @@ const SidePanel = () => {
         >
           复制统一输出
         </button>
-        <button style={{ cursor: 'pointer', padding: '4px 8px' }} onClick={handleExportUnified}>
+        <button className="btn-secondary" style={{ cursor: 'pointer', padding: '4px 8px' }} onClick={handleExportUnified}>
           导出为文件
         </button>
         <span style={{ fontSize: '12px', color: '#666' }}>{copyStatus}</span>
       </div>
 
+      <div className="card">
+      <h2 style={{ marginTop: 0 }}>Reports</h2>
       <h3 style={{ marginTop: '16px', marginBottom: '8px' }}>导出历史（最近 {EXPORT_HISTORY_MAX} 条）</h3>
       <div style={{ marginBottom: '12px', fontSize: '12px', color: '#666' }}>
         导出记录保存在 storage，可点击「复制」再次复制该次导出的内容。
@@ -1067,6 +1095,7 @@ const SidePanel = () => {
                 {item.kind ? ` (${item.kind}${item.format ? `:${item.format}` : ''})` : ''}
               </span>
               <button
+                className="btn-secondary"
                 style={{ cursor: 'pointer', padding: '2px 8px', fontSize: '12px' }}
                 onClick={async () => {
                   try {
@@ -1088,8 +1117,10 @@ const SidePanel = () => {
         <span style={{ fontSize: '12px', color: '#666', marginTop: '4px', display: 'block' }}>{exportHistoryCopyStatus}</span>
       )}
 
+      </div>
       <div style={{ marginTop: '12px' }}>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const ctx = { steps }
@@ -1121,6 +1152,7 @@ const SidePanel = () => {
 
       <div style={{ marginTop: '12px' }}>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
             const result = buildValidationResultPlaceholder()
@@ -1166,12 +1198,14 @@ const SidePanel = () => {
           Only On Failure
         </label>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => exportReport('json')}
         >
           Export Report JSON
         </button>
         <button
+          className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => exportReport('markdown')}
         >
@@ -1181,6 +1215,7 @@ const SidePanel = () => {
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
 
         <button
+          className="btn-primary"
           style={{ cursor: 'pointer', padding: '6px 12px' }}
           onClick={async () => {
             setExecStatus('RUNNING')
@@ -1203,31 +1238,37 @@ const SidePanel = () => {
           <span style={{ color: execStatus === 'FAIL' ? '#c00' : execStatus === 'RUNNING' ? '#08c' : '#333' }}>
             {execStatus === 'RUNNING' ? '执行中…' : execStatus === 'DONE' ? '完成' : execStatus === 'FAIL' ? '失败' : '未执行'}
           </span>
+          {execStatus === 'DONE' && <span className="badge pass">PASS</span>}
+          {execStatus === 'FAIL' && <span className="badge fail">FAIL</span>}
         </div>
         {execReport?.logs?.length > 0 && (
-          <div style={{ marginTop: '8px' }}>
-            <strong>每步结果：</strong>
+          <details style={{ marginTop: '8px' }}>
+            <summary>Execution Logs ({execReport.logs.length})</summary>
             <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0' }}>
               {execReport.logs.map((log, i) => (
                 <li key={i} style={{ padding: '4px 0', borderBottom: '1px solid #eee', color: log.status === 'OK' ? '#080' : log.status === 'FAIL' ? '#c00' : '#666' }}>
-                  {log.index}. {log.status} {log.note ? `— ${log.note}` : ''} {log.screenshotId ? ` [${log.screenshotId}]` : ''}
+                  {log.index}. <span className={`badge ${log.status === 'OK' ? 'pass' : log.status === 'FAIL' ? 'fail' : ''}`}>{log.status}</span> {log.note ? ` note: ${log.note}` : ''} {log.screenshotId ? ` [${log.screenshotId}]` : ''}
                 </li>
               ))}
             </ul>
-          </div>
+          </details>
         )}
         {validationResult && (
           <div style={{ marginTop: '12px' }}>
             <strong>校验结果：</strong>
             <span style={{ color: validationResult.status === 'PASS' ? '#080' : '#c00' }}>{validationResult.status}</span>
+            <span className={`badge ${validationResult.status === 'PASS' ? 'pass' : 'fail'}`}>{validationResult.status}</span>
             {validationResult.issues?.length > 0 && (
-              <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0' }}>
-                {validationResult.issues.map((issue, i) => (
-                  <li key={i} style={{ padding: '4px 0', fontSize: '11px', color: '#c00' }}>
-                    [{issue.source || issue.kind}] {issue.message} {issue.selector ? ` selector: ${issue.selector}` : ''} {issue.expected ? ` expected: ${issue.expected}` : ''}
-                  </li>
-                ))}
-              </ul>
+              <details style={{ marginTop: '6px' }}>
+                <summary>Issues ({validationResult.issues.length})</summary>
+                <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0' }}>
+                  {validationResult.issues.map((issue, i) => (
+                    <li key={i} style={{ padding: '4px 0', fontSize: '11px', color: '#c00' }}>
+                      [{issue.source || issue.kind}] {issue.message} {issue.selector ? ` selector: ${issue.selector}` : ''} {issue.expected ? ` expected: ${issue.expected}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </details>
             )}
           </div>
         )}
@@ -1235,10 +1276,13 @@ const SidePanel = () => {
           <div style={{ marginTop: '12px', padding: '10px', background: assertionResult.ok ? '#f0f8f0' : '#fff0f0', borderRadius: '4px', border: `1px solid ${assertionResult.ok ? '#b0d0b0' : '#e0b0b0'}` }}>
             <strong>断言结果：</strong>
             <span style={{ color: assertionResult.ok ? '#080' : '#c00', marginLeft: '6px' }}>
-              {assertionResult.ok ? '通过' : '失败'}
+              {assertionResult.ok ? 'PASS' : 'FAIL'}
             </span>
+            <span className={`badge ${assertionResult.ok ? 'pass' : 'fail'}`}>{assertionResult.ok ? 'PASS' : 'FAIL'}</span>
             {assertionResult.issues?.length > 0 ? (
-              <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
+              <details style={{ marginTop: '8px' }}>
+                <summary>Issues ({assertionResult.issues.length})</summary>
+                <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
                 {assertionResult.issues.map((issue, i) => (
                   <li key={i} style={{ padding: '6px 0', fontSize: '12px', borderBottom: '1px solid #eee' }}>
                     <span style={{ color: issue.passed ? '#080' : '#c00' }}>{issue.passed ? '✓' : '✗'}</span>
@@ -1249,12 +1293,14 @@ const SidePanel = () => {
                     {issue.reason && <span style={{ color: '#666' }}> | {issue.reason}</span>}
                   </li>
                 ))}
-              </ul>
+                </ul>
+              </details>
             ) : (
               <div style={{ marginTop: '6px', fontSize: '12px', color: '#666' }}>无具体条目（全部通过）</div>
             )}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
