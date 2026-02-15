@@ -370,9 +370,25 @@ const SidePanel = () => {
   };
 
   return (
-    <div style={{ padding: '16px', fontFamily: 'sans-serif' }}>
+    <div className="panel-root">
+      <style>{`
+        .panel-root { font-family: 'Inter', system-ui, -apple-system, Segoe UI, sans-serif; background:#0F172A; color:#F8FAFC; padding:16px; min-height:100vh; }
+        .panel-root h2 { margin:0 0 12px; font-size:18px; font-weight:700; color:#F8FAFC; }
+        .panel-root h3 { margin:16px 0 8px; font-size:14px; font-weight:600; color:#E2E8F0; }
+        .panel-root input, .panel-root textarea, .panel-root select { background:#0B1220; color:#F8FAFC; border:1px solid #334155; border-radius:8px; padding:6px 8px; outline:none; }
+        .panel-root input:focus, .panel-root textarea:focus, .panel-root select:focus { border-color:#22C55E; box-shadow:0 0 0 2px rgba(34,197,94,0.2); }
+        .panel-root button { background:#334155; color:#F8FAFC; border:1px solid #475569; border-radius:8px; padding:6px 10px; cursor:pointer; transition:background 150ms, border 150ms; }
+        .panel-root button:hover { background:#1E293B; border-color:#64748B; }
+        .panel-root button:disabled { opacity:0.6; cursor:not-allowed; }
+        .panel-root .btn-primary { background:#22C55E; border-color:#22C55E; color:#0B1220; font-weight:600; }
+        .panel-root .btn-danger { background:#EF4444; border-color:#EF4444; color:#fff; }
+        .panel-root .badge { display:inline-block; padding:2px 6px; border-radius:6px; font-size:11px; margin-left:6px; }
+        .panel-root .badge.pass { background:#16A34A; color:#fff; }
+        .panel-root .badge.fail { background:#DC2626; color:#fff; }
+        .panel-root .card { background:#0B1220; border:1px solid #1F2937; border-radius:12px; padding:12px; margin-bottom:12px; }
+      `}</style>
       <h2>模型配置</h2>
-      <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
+      <div className="card" style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
         <label>
           Model：
           <input
