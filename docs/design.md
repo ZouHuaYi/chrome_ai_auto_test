@@ -169,3 +169,48 @@
 - **侧边栏**：在现有「录制步骤」区块加「导入 Steps」与 network 展开；在「统一输出」区块加「导出文件」「导出历史」入口。
 
 以上设计覆盖 req.md 待补充功能 1–10，并保持与现有 storage、step、docJson、modelConfig 兼容，无破坏性变更。
+
+---
+
+## Phase 2: Real Data / Testing Design
+
+### LLM Real Calls
+- Config source: `chrome.storage.local` key `modelConfig` (model, temperature, max_tokens) and `settings` (baseUrl, apiKey, timeoutMs, retry, rateLimit).
+- Flow: build prompt -> read config -> call background LLM client -> return raw response + metadata -> parse into plan/validation/assertion templates.
+- Timeout/retry: per-request timeout `timeoutMs` with `AbortController`; retry with exponential backoff and jitter (maxAttempts from config, default 2 retries).
+- Rate limit: token-bucket in background (per minute cap) + per-origin concurrency limit; queue when exceeded.
+- Error handling: classify `network`, `timeout`, `rate_limit`, `auth`, `invalid_response`; return `{ ok:false, error:{ kind, message, retryable, detail } }` and surface in sidepanel.
+
+### Feishu Public Link Fetch
+- Parse flow: accept token or public doc URL -> normalize to doc id -> fetch doc content via public link endpoint -> convert to `docJson` via parser.
+- Caching: in-memory LRU (session) + `chrome.storage.local` cache with `{ docId, etag, fetchedAt, docJson }`; refresh when TTL expired or ETag changed.
+
+### Real Replay + Assertions
+- Pipeline: recorded steps -> LLM plan (if needed) -> content-script replay -> execution report -> validators -> assertions -> final result.
+- Result schema:
+  - `execReport`: `{ executed: number, logs: Array<{ index, status, note?, screenshotId? }> }`
+  - `validateResult`: `{ status: 'PASS'|'FAIL'|'PENDING', issues: Array<{ kind, message, selector? }> }`
+  - `assertResult`: `{ ok: boolean, issues: Array<{ expected, actual, passed, reason? }> }`
+  - `final`: `{ ok, execReport, validateResult, assertResult, meta: { startedAt, finishedAt, durationMs } }`
+- Logs/screenshots: store per-step logs and optional screenshots; screenshots saved as data URLs or file blobs with stable `screenshotId`.
+
+### Report Export
+- Format: JSON (full) + Markdown summary; both include `final` + `docJson` reference + `modelConfig` snapshot.
+- History: append to `exportHistory` (max 20, FIFO) with `{ id, timestamp, content, diffBaseId? }`.
+- Diff: compare against previous report (by `diffBaseId` or last item) and include `diff` section (changed steps, changed issues, status delta).
+
+### E2E Test Plan (https://www.baidu.com)
+- Steps:
+  1. Open page, wait for load.
+  2. Locate search input, type `openai`.
+  3. Click search button or press Enter.
+  4. Wait for results page.
+- Checks:
+  - Input is visible and enabled.
+  - After submit, URL changes and results container exists.
+  - At least one result item with title/link text.
+  - No critical console errors during flow.
+
+### Risks & Rollback
+- Risks: API quota exhaustion, Feishu public link changes, LLM response drift, flaky replay due to dynamic DOM, storage overflow.
+- Rollback: feature flag to switch to mock LLM + mock replay; keep last-known-good modelConfig; disable export diffing if unstable.
