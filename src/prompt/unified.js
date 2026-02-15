@@ -1,9 +1,13 @@
+/**
+ * 组装统一输出。扩展：可选 assertionResult，写入【断言结果】段（兼容：不传则无此段）。
+ */
 function assembleUnifiedOutput({
   promptText = '',
   planJson = {},
   validateJson = {},
   simulateJson = {},
   assertionTemplate = '',
+  assertionResult,
   modelConfig
 } = {}) {
   const planSection = JSON.stringify(planJson, null, 2)
@@ -35,6 +39,18 @@ function assembleUnifiedOutput({
     '【断言模板】',
     assertionTemplate || '（空）'
   )
+  if (assertionResult != null && typeof assertionResult === 'object') {
+    const status = assertionResult.ok ? 'PASS' : 'FAIL'
+    const issuesText = (assertionResult.issues || []).length
+      ? (assertionResult.issues || []).map((i) => `- [${i.passed ? '通过' : '失败'}] 预期: ${i.expected} | 实际: ${i.actual}${i.reason ? ` | 原因: ${i.reason}` : ''}`).join('\n')
+      : '（无）'
+    parts.push(
+      '',
+      '【断言结果】',
+      `status: ${status}`,
+      `issues:\n${issuesText}`
+    )
+  }
   return parts.join('\n')
 }
 

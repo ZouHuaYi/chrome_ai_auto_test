@@ -32,6 +32,10 @@ const SidePanel = () => {
   const [assertTemplateCache, setAssertTemplateCache] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
   const [fileStatus, setFileStatus] = useState('');
+  const [assertionResult, setAssertionResult] = useState(null);
+  const [exportHistory, setExportHistory] = useState([]);
+  const [exportHistoryCopyStatus, setExportHistoryCopyStatus] = useState('');
+  const EXPORT_HISTORY_MAX = 20;
 
   const defaultModelConfig = { model: 'gpt-4o', temperature: 0.2, max_tokens: 2048 };
   const [modelConfig, setModelConfig] = useState(defaultModelConfig);
@@ -62,7 +66,7 @@ const SidePanel = () => {
 
   useEffect(() => {
     // 1. Load initial state from storage
-    chrome.storage.local.get(['recorded_steps', 'settings', 'modelConfig', 'feishuConfig'], (result) => {
+    chrome.storage.local.get(['recorded_steps', 'settings', 'modelConfig', 'feishuConfig', 'exportHistory'], (result) => {
       if (result.recorded_steps && Array.isArray(result.recorded_steps)) {
         setSteps(result.recorded_steps);
       }
@@ -74,6 +78,9 @@ const SidePanel = () => {
       }
       if (result.feishuConfig) {
         setFeishuConfig({ ...defaultFeishuConfig, ...result.feishuConfig });
+      }
+      if (result.exportHistory && Array.isArray(result.exportHistory)) {
+        setExportHistory(result.exportHistory);
       }
     });
 
@@ -136,6 +143,42 @@ const SidePanel = () => {
       }
     }
     return out;
+  };
+
+  /** 导出统一输出为带时间戳的文件，并写入 exportHistory（最近 N 条） */
+  const handleExportUnified = () => {
+    let planJson = {};
+    try {
+      planJson = planText ? JSON.parse(planText) : {};
+    } catch {
+      planJson = {};
+    }
+    const content = assembleUnifiedOutput({
+      promptText,
+      planJson,
+      validateJson: validateJsonCache || {},
+      simulateJson: simulateJsonCache || {},
+      assertionTemplate: assertTemplateCache || '',
+      assertionResult: assertionResult ?? undefined,
+      modelConfig
+    });
+    const ts = new Date();
+    const stamp = `${ts.getFullYear()}${String(ts.getMonth() + 1).padStart(2, '0')}${String(ts.getDate()).padStart(2, '0')}_${String(ts.getHours()).padStart(2, '0')}${String(ts.getMinutes()).padStart(2, '0')}${String(ts.getSeconds()).padStart(2, '0')}`;
+    const filename = `unified_${stamp}.txt`;
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    const next = [
+      { id: Date.now(), timestamp: ts.toISOString(), content },
+      ...exportHistory
+    ].slice(0, EXPORT_HISTORY_MAX);
+    setExportHistory(next);
+    chrome.storage.local.set({ exportHistory: next });
   };
 
   const handleImportSteps = (file, replace, dedup) => {
@@ -687,6 +730,7 @@ const SidePanel = () => {
               validateJson: validateJsonCache || {},
               simulateJson: simulateJsonCache || {},
               assertionTemplate: assertTemplateCache || '',
+              assertionResult: assertionResult ?? undefined,
               modelConfig
             })
             setUnifiedText(unified)
@@ -708,7 +752,7 @@ const SidePanel = () => {
         }}
         placeholder="统一输出将显示在这里..."
       />
-      <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         <button
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={async () => {
@@ -722,8 +766,59 @@ const SidePanel = () => {
         >
           复制统一输出
         </button>
+        <button style={{ cursor: 'pointer', padding: '4px 8px' }} onClick={handleExportUnified}>
+          导出为文件
+        </button>
         <span style={{ fontSize: '12px', color: '#666' }}>{copyStatus}</span>
       </div>
+
+      <h3 style={{ marginTop: '16px', marginBottom: '8px' }}>导出历史（最近 {EXPORT_HISTORY_MAX} 条）</h3>
+      <div style={{ marginBottom: '12px', fontSize: '12px', color: '#666' }}>
+        导出记录保存在 storage，可点击「复制」再次复制该次导出的内容。
+      </div>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+        {exportHistory.length === 0 ? (
+          <li style={{ padding: '8px', color: '#999' }}>暂无导出记录</li>
+        ) : (
+          exportHistory.map((item) => (
+            <li
+              key={item.id}
+              style={{
+                padding: '8px 10px',
+                marginBottom: '6px',
+                background: '#f8f8f8',
+                borderRadius: '4px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}
+            >
+              <span style={{ fontSize: '12px', color: '#333' }}>
+                {item.timestamp ? new Date(item.timestamp).toLocaleString('zh-CN') : '—'}
+              </span>
+              <button
+                style={{ cursor: 'pointer', padding: '2px 8px', fontSize: '12px' }}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(item.content || '');
+                    setExportHistoryCopyStatus(`已复制 (${new Date(item.timestamp).toLocaleTimeString('zh-CN')})`);
+                    setTimeout(() => setExportHistoryCopyStatus(''), 2000);
+                  } catch (e) {
+                    setExportHistoryCopyStatus('复制失败');
+                  }
+                }}
+              >
+                复制
+              </button>
+            </li>
+          ))
+        )}
+      </ul>
+      {exportHistoryCopyStatus && (
+        <span style={{ fontSize: '12px', color: '#666', marginTop: '4px', display: 'block' }}>{exportHistoryCopyStatus}</span>
+      )}
 
       <div style={{ marginTop: '12px' }}>
         <button
@@ -797,6 +892,13 @@ const SidePanel = () => {
             setExecReport(res.report)
             setValidationResult(res.validationResult)
             setExecStatus(res.ok ? 'DONE' : 'FAIL')
+            const assertRes = assertPlan({
+              steps,
+              execReport: res.report,
+              validateResult: res.validationResult ?? null,
+              assertionTemplate: assertTemplateCache || ''
+            })
+            setAssertionResult(assertRes)
           }}
         >
           真实执行
@@ -833,6 +935,30 @@ const SidePanel = () => {
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+        )}
+        {assertionResult != null && (
+          <div style={{ marginTop: '12px', padding: '10px', background: assertionResult.ok ? '#f0f8f0' : '#fff0f0', borderRadius: '4px', border: `1px solid ${assertionResult.ok ? '#b0d0b0' : '#e0b0b0'}` }}>
+            <strong>断言结果：</strong>
+            <span style={{ color: assertionResult.ok ? '#080' : '#c00', marginLeft: '6px' }}>
+              {assertionResult.ok ? '通过' : '失败'}
+            </span>
+            {assertionResult.issues?.length > 0 ? (
+              <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
+                {assertionResult.issues.map((issue, i) => (
+                  <li key={i} style={{ padding: '6px 0', fontSize: '12px', borderBottom: '1px solid #eee' }}>
+                    <span style={{ color: issue.passed ? '#080' : '#c00' }}>{issue.passed ? '✓' : '✗'}</span>
+                    {' '}
+                    <strong>预期：</strong>{issue.expected}
+                    {' | '}
+                    <strong>实际：</strong>{issue.actual}
+                    {issue.reason && <span style={{ color: '#666' }}> | {issue.reason}</span>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ marginTop: '6px', fontSize: '12px', color: '#666' }}>无具体条目（全部通过）</div>
             )}
           </div>
         )}
