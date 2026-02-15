@@ -120,9 +120,9 @@ npm run package:ext
    - 在任意标签页内操作，步骤会同步到侧边栏「录制步骤」列表，并写入扩展本地存储。
 
 2. **文档与导入**
-   - **Markdown**：在「Markdown 解析预览」中粘贴或导入 `.md`，解析结果用于生成 Prompt/断言模板。
-   - **飞书文档**：在「飞书文档导入（占位）」中粘贴内容或 Doc Token（当前仅占位，未接真实 API）。
-   - **思维导图**：在「思维导图导入（占位）」中粘贴或通过「导入思维导图」选择 `.json/.md/.txt`，内容进入文本框（当前无结构化解析）。
+   - **Markdown**：在「Markdown 解析预览」中粘贴或导入 `.md`，点击「解析」后用于生成 Prompt/断言模板。
+   - **飞书文档**：在「飞书文档导入」中配置 Access Token（需自行在飞书开放平台获取 tenant_access_token）、可选 API Base，输入文档链接或 Doc Token 后点击「拉取」，将飞书文档转为与 Markdown 一致的结构（标题/列表/段落）并参与生成。
+   - **思维导图**：在「思维导图导入」中粘贴 JSON（支持 `name`/`title` + `children` 树形）或 Markdown 大纲（`-`/`*` 缩进），点击「解析思维导图」后参与生成。文档来源可在「当前文档来源」处切换（Markdown / 飞书 / 思维导图）。
 
 3. **生成与导出**
    - **生成 Prompt**：基于当前录制步骤 + 解析后的文档生成测试 Prompt。
@@ -144,6 +144,7 @@ npm run package:ext
 | 录制步骤 | `recorded_steps` | 数组，每项为 `{ type, target, value?, text?, ... }` |
 | 录制设置 | `settings` | `enabled`、`events`（click/input/change/scroll）、`debounceMs`、`throttleMs`、`networkCapture` |
 | 模型配置 | `modelConfig` | `model`、`temperature`、`max_tokens` |
+| 飞书配置 | `feishuConfig` | `accessToken`（tenant_access_token）、`apiBase`（可选，默认 `https://open.feishu.cn/open-apis`）；用于「飞书文档导入」拉取文档 |
 
 - 扩展权限：`sidePanel`、`storage`、`tabs`、`activeTab`、`webRequest`；`host_permissions`: `<all_urls>`（用于注入录制与可选网络采集）。
 
@@ -158,7 +159,7 @@ npm run package:ext
 执行 `npm run build`，然后在扩展管理页重新加载 `dist` 目录。
 
 **Q：飞书/思维导图导入没效果？**  
-当前飞书为占位（无真实 API），思维导图仅支持文件内容填入文本框，暂无结构化解析或与生成流程的深度联动，后续会在「待补充功能清单」中体现。
+飞书需在侧边栏配置 Access Token（飞书开放平台应用获取 tenant_access_token），输入文档链接或 Doc Token 后点击「拉取」。思维导图支持 JSON 树形（name/title + children）或 Markdown 大纲，粘贴后点击「解析思维导图」即可参与生成；生成时以「当前文档来源」选中的为准。
 
 **Q：执行计划/校验结果是真实执行吗？**  
 否。当前执行与校验均为本地模拟/占位，不会真正回放或调用外部 API。

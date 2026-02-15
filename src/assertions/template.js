@@ -7,8 +7,9 @@ function generateAssertionTemplate(docJson = {}) {
 
   const children = Array.isArray(docJson.children) ? docJson.children : []
   children.forEach((node) => {
-    if (node.type === 'heading') {
-      lines.push(`- 针对功能点“${node.text}”补充断言`)
+    if (node.type === 'heading' || node.type === 'node') {
+      const text = node.text ?? node.title ?? ''
+      if (text) lines.push(`- 针对功能点“${text}”补充断言`)
     }
     if (node.type === 'list' && Array.isArray(node.items)) {
       node.items.forEach((item) => lines.push(`- 断言建议：${item}`))

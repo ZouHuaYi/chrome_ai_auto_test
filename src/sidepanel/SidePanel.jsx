@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { parseMarkdown } from '../parser/markdown.js';
+import { parseMindmap } from '../parser/mindmap.js';
+import { getDocIdFromInput, fetchDoc } from '../feishu.js';
 import { assemblePrompt } from '../prompt/assembler.js';
 import { assembleUnifiedOutput } from '../prompt/unified.js';
 import { executePlan } from '../executor/executor.js';
@@ -32,8 +34,17 @@ const SidePanel = () => {
   const defaultModelConfig = { model: 'gpt-4o', temperature: 0.2, max_tokens: 2048 };
   const [modelConfig, setModelConfig] = useState(defaultModelConfig);
   const [feishuText, setFeishuText] = useState('');
+  const [feishuDocTokenOrUrl, setFeishuDocTokenOrUrl] = useState('');
+  const [feishuDocJson, setFeishuDocJson] = useState(null);
+  const [feishuLoading, setFeishuLoading] = useState(false);
+  const [feishuError, setFeishuError] = useState('');
   const [mindmapText, setMindmapText] = useState('');
+  const [mindmapDocJson, setMindmapDocJson] = useState(null);
+  const [mindmapParseError, setMindmapParseError] = useState('');
+  const [docSource, setDocSource] = useState('md'); // 'md' | 'feishu' | 'mindmap'
   const [importStatus, setImportStatus] = useState('');
+  const defaultFeishuConfig = { accessToken: '', apiBase: 'https://open.feishu.cn/open-apis' };
+  const [feishuConfig, setFeishuConfig] = useState(defaultFeishuConfig);
   const [stepsImportMode, setStepsImportMode] = useState('replace'); // 'replace' | 'append'
   const [stepsImportDedup, setStepsImportDedup] = useState(false);
   const [stepsImportStatus, setStepsImportStatus] = useState('');
@@ -49,7 +60,7 @@ const SidePanel = () => {
 
   useEffect(() => {
     // 1. Load initial state from storage
-    chrome.storage.local.get(['recorded_steps', 'settings', 'modelConfig'], (result) => {
+    chrome.storage.local.get(['recorded_steps', 'settings', 'modelConfig', 'feishuConfig'], (result) => {
       if (result.recorded_steps && Array.isArray(result.recorded_steps)) {
         setSteps(result.recorded_steps);
       }
@@ -58,6 +69,9 @@ const SidePanel = () => {
       }
       if (result.modelConfig) {
         setModelConfig({ ...defaultModelConfig, ...result.modelConfig });
+      }
+      if (result.feishuConfig) {
+        setFeishuConfig({ ...defaultFeishuConfig, ...result.feishuConfig });
       }
     });
 
@@ -90,6 +104,23 @@ const SidePanel = () => {
   const saveModelConfig = (next) => {
     setModelConfig(next);
     chrome.storage.local.set({ modelConfig: next });
+  };
+
+  const saveFeishuConfig = (next) => {
+    setFeishuConfig(next);
+    chrome.storage.local.set({ feishuConfig: next });
+  };
+
+  /** 当前用于生成的文档结构：MD / 飞书 / 思维导图 三选一，始终返回 { type, children } 形状 */
+  const getEffectiveDocJson = () => {
+    if (docSource === 'feishu' && feishuDocJson) return feishuDocJson;
+    if (docSource === 'mindmap' && mindmapDocJson) return mindmapDocJson;
+    try {
+      const out = mdOutput ? JSON.parse(mdOutput) : parseMarkdown(mdInput || '');
+      return out && typeof out === 'object' ? out : { type: 'document', children: [] };
+    } catch {
+      return parseMarkdown(mdInput || '');
+    }
   };
 
   /** 同 target 同 type 的连续步骤合并为一条（保留第一条） */
@@ -311,8 +342,9 @@ const SidePanel = () => {
         <button
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
-            const parsed = parseMarkdown(mdInput || '')
-            setMdOutput(JSON.stringify(parsed, null, 2))
+            const parsed = parseMarkdown(mdInput || '');
+            setMdOutput(JSON.stringify(parsed, null, 2));
+            setDocSource('md');
           }}
         >
           解析
@@ -326,11 +358,12 @@ const SidePanel = () => {
               if (!file) return
               const reader = new FileReader()
               reader.onload = () => {
-                const text = String(reader.result || '')
-                setMdInput(text)
-                const parsed = parseMarkdown(text)
-                setMdOutput(JSON.stringify(parsed, null, 2))
-                setFileStatus('已导入 Markdown')
+                const text = String(reader.result || '');
+                setMdInput(text);
+                const parsed = parseMarkdown(text);
+                setMdOutput(JSON.stringify(parsed, null, 2));
+                setDocSource('md');
+                setFileStatus('已导入 Markdown');
               }
               reader.onerror = () => setFileStatus('导入失败')
               reader.readAsText(file)
@@ -341,44 +374,127 @@ const SidePanel = () => {
         <span style={{ fontSize: '12px', color: '#666' }}>{fileStatus}</span>
       </div>
 
-      <h3 style={{ marginBottom: '8px' }}>飞书文档导入（占位）</h3>
+      <h3 style={{ marginBottom: '8px' }}>飞书文档导入</h3>
+      <div style={{ display: 'grid', gap: '8px', marginBottom: '8px' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          Access Token：
+          <input
+            type="password"
+            value={feishuConfig.accessToken}
+            onChange={(e) => saveFeishuConfig({ ...feishuConfig, accessToken: e.target.value })}
+            placeholder="tenant_access_token"
+            style={{ flex: 1, fontSize: '12px', padding: '6px' }}
+          />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          API Base（可选）：
+          <input
+            type="text"
+            value={feishuConfig.apiBase}
+            onChange={(e) => saveFeishuConfig({ ...feishuConfig, apiBase: e.target.value })}
+            placeholder="https://open.feishu.cn/open-apis"
+            style={{ flex: 1, fontSize: '12px', padding: '6px' }}
+          />
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          文档 Token / 链接：
+          <input
+            type="text"
+            value={feishuDocTokenOrUrl}
+            onChange={(e) => { setFeishuDocTokenOrUrl(e.target.value); setFeishuError(''); }}
+            placeholder="doccnXXX 或飞书文档 URL"
+            style={{ flex: 1, fontSize: '12px', padding: '6px' }}
+          />
+        </label>
+      </div>
+      <div style={{ marginBottom: '8px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          disabled={feishuLoading}
+          onClick={async () => {
+            const docId = getDocIdFromInput(feishuDocTokenOrUrl);
+            if (!docId) {
+              setFeishuError('请输入文档链接或 Doc Token');
+              return;
+            }
+            setFeishuLoading(true);
+            setFeishuError('');
+            const result = await fetchDoc({
+              accessToken: feishuConfig.accessToken,
+              docId,
+              apiBase: feishuConfig.apiBase || undefined
+            });
+            setFeishuLoading(false);
+            if (result.ok) {
+              setFeishuDocJson(result.docJson);
+              setDocSource('feishu');
+              setFeishuText(JSON.stringify(result.docJson, null, 2));
+            } else {
+              setFeishuError(result.error || '拉取失败');
+            }
+          }}
+        >
+          {feishuLoading ? '拉取中…' : '拉取'}
+        </button>
+        <span style={{ fontSize: '12px', color: '#c00' }}>{feishuError}</span>
+      </div>
       <textarea
         value={feishuText}
         onChange={(e) => setFeishuText(e.target.value)}
-        placeholder="粘贴飞书文档内容或 Doc Token..."
-        rows={4}
+        placeholder="拉取成功后显示解析结果 JSON，也可手动粘贴..."
+        rows={3}
         style={{ width: '100%', fontSize: '12px', padding: '8px', boxSizing: 'border-box' }}
       />
 
-      <h3 style={{ marginBottom: '8px', marginTop: '12px' }}>思维导图导入（占位）</h3>
+      <h3 style={{ marginBottom: '8px', marginTop: '12px' }}>思维导图导入</h3>
       <textarea
         value={mindmapText}
-        onChange={(e) => setMindmapText(e.target.value)}
-        placeholder="粘贴思维导图 JSON / 文本..."
+        onChange={(e) => { setMindmapText(e.target.value); setMindmapParseError(''); }}
+        placeholder="粘贴思维导图 JSON（name/title + children）或 Markdown 大纲（- / * 缩进）..."
         rows={4}
         style={{ width: '100%', fontSize: '12px', padding: '8px', boxSizing: 'border-box' }}
       />
-      <div style={{ margin: '8px 0', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      <div style={{ margin: '8px 0', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button
+          style={{ cursor: 'pointer', padding: '4px 8px' }}
+          onClick={() => {
+            const result = parseMindmap(mindmapText);
+            setMindmapParseError('');
+            if (result.ok && result.docJson) {
+              setMindmapDocJson(result.docJson);
+              setDocSource('mindmap');
+              setImportStatus('已解析为文档结构');
+            } else {
+              setMindmapParseError(result.error || '解析失败');
+            }
+          }}
+        >
+          解析思维导图
+        </button>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
           <input
             type="file"
             accept=".json,.md,.txt"
             onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (!file) return
-              const reader = new FileReader()
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const reader = new FileReader();
               reader.onload = () => {
-                const text = String(reader.result || '')
-                setMindmapText(text)
-                setImportStatus('已导入思维导图')
-              }
-              reader.onerror = () => setImportStatus('导入失败')
-              reader.readAsText(file)
+                const text = String(reader.result || '');
+                setMindmapText(text);
+                setImportStatus('已导入文件');
+              };
+              reader.onerror = () => setImportStatus('导入失败');
+              reader.readAsText(file);
             }}
           />
-          导入思维导图
+          导入文件
         </label>
         <span style={{ fontSize: '12px', color: '#666' }}>{importStatus}</span>
+        <span style={{ fontSize: '12px', color: '#c00' }}>{mindmapParseError}</span>
+      </div>
+      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+        当前文档来源：{docSource === 'md' ? 'Markdown' : docSource === 'feishu' ? '飞书' : '思维导图'}
       </div>
       <pre
         style={{
@@ -391,19 +507,14 @@ const SidePanel = () => {
           overflow: 'auto'
         }}
       >
-        {mdOutput || '解析结果将显示在这里...'}
+        {docSource === 'md' ? (mdOutput || '解析结果将显示在这里...') : docSource === 'feishu' ? (feishuText || '拉取飞书后显示') : (mindmapDocJson ? JSON.stringify(mindmapDocJson, null, 2) : '解析思维导图后显示')}
       </pre>
 
       <div style={{ marginTop: '12px' }}>
         <button
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
-            let docJson = {}
-            try {
-              docJson = mdOutput ? JSON.parse(mdOutput) : parseMarkdown(mdInput || '')
-            } catch (e) {
-              docJson = parseMarkdown(mdInput || '')
-            }
+            const docJson = getEffectiveDocJson()
             const prompt = assemblePrompt({ steps, docJson, modelConfig })
             setPromptText(prompt)
           }}
@@ -501,12 +612,7 @@ const SidePanel = () => {
         <button
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
-            let docJson = {}
-            try {
-              docJson = mdOutput ? JSON.parse(mdOutput) : parseMarkdown(mdInput || '')
-            } catch (e) {
-              docJson = parseMarkdown(mdInput || '')
-            }
+            const docJson = getEffectiveDocJson()
             const template = generateAssertionTemplate(docJson)
             setAssertTemplateCache(template)
             setAssertTemplateText(template)
@@ -533,12 +639,7 @@ const SidePanel = () => {
         <button
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => {
-            let docJson = {}
-            try {
-              docJson = mdOutput ? JSON.parse(mdOutput) : parseMarkdown(mdInput || '')
-            } catch (e) {
-              docJson = parseMarkdown(mdInput || '')
-            }
+            const docJson = getEffectiveDocJson()
             const prompt = assemblePrompt({ steps, docJson, modelConfig })
             const exec = executePlan(steps)
             const assertsPlan = {

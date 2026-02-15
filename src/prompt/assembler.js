@@ -17,8 +17,9 @@ function generateDocAssertions(docJson = {}) {
   const children = Array.isArray(docJson.children) ? docJson.children : []
 
   children.forEach((node) => {
-    if (node.type === 'heading') {
-      suggestions.push(`- 针对功能点“${node.text}”生成关键断言（UI/数据/文案）`)
+    if (node.type === 'heading' || node.type === 'node') {
+      const text = node.text ?? node.title ?? ''
+      if (text) suggestions.push(`- 针对功能点“${text}”生成关键断言（UI/数据/文案）`)
     }
     if (node.type === 'list' && Array.isArray(node.items)) {
       node.items.forEach((item) => {
