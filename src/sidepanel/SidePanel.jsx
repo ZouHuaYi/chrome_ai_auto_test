@@ -24,6 +24,8 @@ const SidePanel = () => {
   const [validateJsonCache, setValidateJsonCache] = useState({});
   const [validateResultText, setValidateResultText] = useState('');
   const [execStatus, setExecStatus] = useState('PENDING');
+  const [execReport, setExecReport] = useState(null);
+  const [validationResult, setValidationResult] = useState(null);
   const [simulateText, setSimulateText] = useState('');
   const [assertTemplateText, setAssertTemplateText] = useState('');
   const [simulateJsonCache, setSimulateJsonCache] = useState({});
@@ -779,21 +781,61 @@ const SidePanel = () => {
         placeholder="校验结果占位将显示在这里..."
       />
 
-      <div style={{ marginTop: '12px' }}>
+      <h3 style={{ marginTop: '16px', marginBottom: '8px' }}>真实执行与校验</h3>
+      <p style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+        在目标网页激活时点击「真实执行」，将在当前标签页回放步骤并执行 ui/text/data 校验。
+      </p>
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
         <button
-          style={{ cursor: 'pointer', padding: '4px 8px' }}
-          onClick={() => {
+          style={{ cursor: 'pointer', padding: '6px 12px' }}
+          onClick={async () => {
             setExecStatus('RUNNING')
-            const engine = runValidatorEngine({ steps })
-            const status = engine?.result?.status || 'DONE'
-            setExecStatus(status)
+            setExecReport(null)
+            setValidationResult(null)
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true }).catch(() => [])
+            const res = await executePlan(steps, tab?.id)
+            setExecReport(res.report)
+            setValidationResult(res.validationResult)
+            setExecStatus(res.ok ? 'DONE' : 'FAIL')
           }}
         >
-          执行状态占位
+          真实执行
         </button>
-        <div style={{ marginTop: '6px', fontSize: '12px', color: '#333' }}>
-          执行状态: {execStatus}
+      </div>
+      <div style={{ marginTop: '12px', fontSize: '12px' }}>
+        <div style={{ marginBottom: '6px' }}>
+          <strong>执行状态：</strong>
+          <span style={{ color: execStatus === 'FAIL' ? '#c00' : execStatus === 'RUNNING' ? '#08c' : '#333' }}>
+            {execStatus === 'RUNNING' ? '执行中…' : execStatus === 'DONE' ? '完成' : execStatus === 'FAIL' ? '失败' : '未执行'}
+          </span>
         </div>
+        {execReport?.logs?.length > 0 && (
+          <div style={{ marginTop: '8px' }}>
+            <strong>每步结果：</strong>
+            <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0' }}>
+              {execReport.logs.map((log, i) => (
+                <li key={i} style={{ padding: '4px 0', borderBottom: '1px solid #eee', color: log.status === 'OK' ? '#080' : log.status === 'FAIL' ? '#c00' : '#666' }}>
+                  {log.index}. {log.status} {log.note ? `— ${log.note}` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {validationResult && (
+          <div style={{ marginTop: '12px' }}>
+            <strong>校验结果：</strong>
+            <span style={{ color: validationResult.status === 'PASS' ? '#080' : '#c00' }}>{validationResult.status}</span>
+            {validationResult.issues?.length > 0 && (
+              <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0' }}>
+                {validationResult.issues.map((issue, i) => (
+                  <li key={i} style={{ padding: '4px 0', fontSize: '11px', color: '#c00' }}>
+                    [{issue.source || issue.kind}] {issue.message} {issue.selector ? ` selector: ${issue.selector}` : ''} {issue.expected ? ` expected: ${issue.expected}` : ''}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

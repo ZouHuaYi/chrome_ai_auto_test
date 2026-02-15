@@ -1,4 +1,4 @@
-﻿const SENSITIVE_KEYWORDS = [
+const SENSITIVE_KEYWORDS = [
   'password',
   'passwd',
   'passphrase',
@@ -288,3 +288,38 @@ document.addEventListener('click', handleClick, true)
 document.addEventListener('input', handleInput, true)
 document.addEventListener('change', handleChange, true)
 window.addEventListener('scroll', handleScroll, { passive: true })
+
+// --- REPLAY：真实执行步骤并在当前页执行校验 ---
+import { runReplay } from './replay.js'
+import { run as runValidatorEngine } from '../validators/engine.js'
+
+function handleReplay(message, sendResponse) {
+  const steps = message?.steps
+  if (!Array.isArray(steps) || steps.length === 0) {
+    sendResponse?.({ ok: true, report: { executed: 0, logs: [] }, validationResult: null })
+    return
+  }
+  try {
+    const result = runReplay(document, steps)
+    const validationResult = runValidatorEngine({ steps, document }).result
+    sendResponse?.({
+      ok: result.ok,
+      report: result.report,
+      validationResult
+    })
+  } catch (e) {
+    sendResponse?.({
+      ok: false,
+      report: { executed: 0, logs: [{ status: 'FAIL', note: String(e?.message || e) }] },
+      validationResult: { status: 'FAIL', issues: [{ kind: 'error', message: String(e?.message || e) }] }
+    })
+  }
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.action === 'REPLAY') {
+    handleReplay(message, sendResponse)
+    return true
+  }
+  return false
+})
