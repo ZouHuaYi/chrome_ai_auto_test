@@ -43,6 +43,27 @@ npm run dev
 
 在 `chrome://extensions/` 中加载 **`dist`** 目录（若使用 @crxjs/vite-plugin，dev 会持续产出 dist）。修改代码后根据需要重新加载扩展或等待热更新。
 
+### 测试
+
+单元测试使用 [Vitest](https://vitest.dev/)，当前为最小可行：parser、prompt、executor、validators 各 1 个用例（`tests/*.test.js`）。
+
+```cmd
+npm test
+```
+
+单次运行全部测试（CI 使用）。
+
+```cmd
+npm run test:watch
+```
+
+监听模式，修改源码后自动重跑相关测试。
+
+- 测试匹配规则见 `vite.config.js` 中 `test.include`（含 `tests/**/*.test.js`）。
+- 所有脚本通过 npm 调用，**Windows 下可直接在 cmd/PowerShell 中执行**。
+
+**CI**：GitHub Actions 在 `push` / `pull_request` 到 `main` 或 `master` 时执行 `npm ci`、`npm test`、`npm run build`；矩阵在 **Ubuntu** 与 **Windows** 上运行（`.github/workflows/ci.yml`）。
+
 ---
 
 ## 目录结构
