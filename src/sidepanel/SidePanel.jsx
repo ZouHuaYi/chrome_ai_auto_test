@@ -35,6 +35,8 @@ const SidePanel = () => {
   const [assertionResult, setAssertionResult] = useState(null);
   const [exportHistory, setExportHistory] = useState([]);
   const [exportHistoryCopyStatus, setExportHistoryCopyStatus] = useState('');
+  const [reportFilter, setReportFilter] = useState('all');
+  const [latestReportCopyStatus, setLatestReportCopyStatus] = useState('');
   const EXPORT_HISTORY_MAX = 20;
 
   const defaultModelConfig = { model: 'gpt-4o', temperature: 0.2, max_tokens: 2048 };
@@ -232,6 +234,19 @@ const SidePanel = () => {
     return list.find((item) => item.kind === 'report' && item.report) || null;
   };
 
+  const getReportItems = (history) => {
+    const list = Array.isArray(history) ? history : [];
+    return list.filter((item) => item.kind === 'report' && item.report);
+  };
+
+  const isFailedReport = (item) => {
+    if (!item?.report) return false;
+    if (item.report.ok === false) return true;
+    if (item.report.status && String(item.report.status).toUpperCase() === 'FAIL') return true;
+    if (item.report.result && item.report.result.ok === false) return true;
+    return false;
+  };
+
   const exportReport = (format) => {
     if (!lastRunResult) {
       setExportHistoryCopyStatus('No report to export');
@@ -369,12 +384,41 @@ const SidePanel = () => {
     reader.readAsText(file);
   };
 
+  const reportItems = getReportItems(exportHistory);
+  const latestReportItem = reportItems[0] || null;
+  const filteredReportItems = reportFilter === 'latest'
+    ? (latestReportItem ? [latestReportItem] : [])
+    : reportFilter === 'failed'
+      ? reportItems.filter(isFailedReport)
+      : reportItems;
+
+  const statusInfo = (() => {
+    if (execStatus === 'RUNNING') {
+      return { tone: 'info', text: '执行中，正在采集结果…' };
+    }
+    const hasFail = execStatus === 'FAIL'
+      || validationResult?.status === 'FAIL'
+      || assertionResult?.ok === false;
+    if (hasFail) {
+      return { tone: 'fail', text: '执行或校验失败，请查看日志与问题列表。' };
+    }
+    const allPass = execStatus === 'DONE'
+      && (validationResult ? validationResult.status === 'PASS' : true)
+      && (assertionResult ? assertionResult.ok === true : true);
+    if (allPass) {
+      return { tone: 'success', text: '执行通过，校验无问题。' };
+    }
+    return { tone: 'neutral', text: '等待执行，或尚未产生校验结果。' };
+  })();
+
+
   return (
     <div className="panel-root">
       <style>{`
         .panel-root { font-family: 'Inter', system-ui, -apple-system, Segoe UI, sans-serif; background:#0F172A; color:#F8FAFC; padding:16px; min-height:100vh; }
         .panel-root h2 { margin:0 0 12px; font-size:18px; font-weight:700; color:#F8FAFC; }
         .panel-root h3 { margin:16px 0 8px; font-size:14px; font-weight:600; color:#E2E8F0; }
+        .panel-root label { font-size:12px; color:#E2E8F0; }
         .panel-root input, .panel-root textarea, .panel-root select { background:#0B1220; color:#F8FAFC; border:1px solid #334155; border-radius:8px; padding:6px 8px; outline:none; }
         .panel-root input:focus, .panel-root textarea:focus, .panel-root select:focus { border-color:#22C55E; box-shadow:0 0 0 2px rgba(34,197,94,0.2); }
         .panel-root button { background:#334155; color:#F8FAFC; border:1px solid #475569; border-radius:8px; padding:6px 10px; cursor:pointer; transition:background 150ms, border 150ms; }
@@ -390,101 +434,118 @@ const SidePanel = () => {
         .panel-root details { background:#0B1220; border:1px solid #1F2937; border-radius:10px; padding:6px 8px; }
         .panel-root details summary { cursor:pointer; font-weight:600; color:#E2E8F0; }
         .panel-root details[open] summary { margin-bottom:6px; }
+        .panel-root .form-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px 12px; }
+        .panel-root .form-item { display:flex; flex-direction:column; gap:4px; }
+        .panel-root .form-inline { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+        .panel-root .status-banner { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:10px; border:1px solid transparent; font-size:12px; }
+        .panel-root .status-banner.success { background:#052e1b; border-color:#15803d; color:#bbf7d0; }
+        .panel-root .status-banner.fail { background:#3b0a0a; border-color:#b91c1c; color:#fecaca; }
+        .panel-root .status-banner.info { background:#0b2442; border-color:#2563eb; color:#bfdbfe; }
+        .panel-root .status-banner.neutral { background:#0b1220; border-color:#334155; color:#e2e8f0; }
+        .panel-root .btn-filter { background:#0B1220; border-color:#334155; color:#E2E8F0; padding:4px 8px; font-size:12px; }
+        .panel-root .btn-filter.active { background:#22C55E; border-color:#22C55E; color:#0B1220; font-weight:600; }
       `}</style>
       <h2>模型配置</h2>
       <div className="card">
-        <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
-        <label>
-          Model：
-          <input
-            type="text"
-            value={modelConfig.model}
-            style={{ width: '180px', marginLeft: '6px' }}
-            onChange={(e) => saveModelConfig({ ...modelConfig, model: e.target.value })}
-          />
-        </label>
-        <label>
-          Temperature：
-          <input
-            type="number"
-            step="0.1"
-            value={modelConfig.temperature}
-            style={{ width: '80px', marginLeft: '6px' }}
-            onChange={(e) =>
-              saveModelConfig({ ...modelConfig, temperature: Number(e.target.value) })
-            }
-          />
-        </label>
-        <label>
-          Max Tokens：
-          <input
-            type="number"
-            value={modelConfig.max_tokens}
-            style={{ width: '100px', marginLeft: '6px' }}
-            onChange={(e) =>
-              saveModelConfig({ ...modelConfig, max_tokens: Number(e.target.value) })
-            }
-          />
-        </label>
+        <div className="form-grid" style={{ marginBottom: '16px' }}>
+          <div className="form-item">
+            <span>??</span>
+            <input
+              type="text"
+              value={modelConfig.model}
+              onChange={(e) => saveModelConfig({ ...modelConfig, model: e.target.value })}
+            />
+          </div>
+          <div className="form-item">
+            <span>??</span>
+            <input
+              type="number"
+              step="0.1"
+              value={modelConfig.temperature}
+              onChange={(e) =>
+                saveModelConfig({ ...modelConfig, temperature: Number(e.target.value) })
+              }
+            />
+          </div>
+          <div className="form-item">
+            <span>?? Token</span>
+            <input
+              type="number"
+              value={modelConfig.max_tokens}
+              onChange={(e) =>
+                saveModelConfig({ ...modelConfig, max_tokens: Number(e.target.value) })
+              }
+            />
+          </div>
         </div>
 
-        <h3 style={{ marginTop: 0 }}>LLM Settings</h3>
-        <div style={{ display: 'grid', gap: '8px', marginBottom: '16px' }}>
-        <label>
-          Base URL
-          <input
-            type="text"
-            value={llmSettings.baseUrl}
-            style={{ width: '100%', marginLeft: '6px' }}
-            onChange={(e) => saveLlmSettings({ ...llmSettings, baseUrl: e.target.value })}
-          />
-        </label>
-        <label>
-          API Key
-          <input
-            type="password"
-            value={llmSettings.apiKey}
-            style={{ width: '100%', marginLeft: '6px' }}
-            onChange={(e) => saveLlmSettings({ ...llmSettings, apiKey: e.target.value })}
-          />
-        </label>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label>
-            Timeout(ms)
+        <h3 style={{ marginTop: 0 }}>LLM ??</h3>
+        <div className="form-grid" style={{ marginBottom: '16px' }}>
+          <div className="form-item">
+            <span>????</span>
+            <input
+              type="text"
+              value={llmSettings.baseUrl}
+              onChange={(e) => saveLlmSettings({ ...llmSettings, baseUrl: e.target.value })}
+            />
+          </div>
+          <div className="form-item">
+            <span>API ??</span>
+            <input
+              type="password"
+              value={llmSettings.apiKey}
+              onChange={(e) => saveLlmSettings({ ...llmSettings, apiKey: e.target.value })}
+            />
+          </div>
+          <div className="form-item">
+            <span>?? (ms)</span>
             <input
               type="number"
               value={llmSettings.timeoutMs}
-              style={{ width: '100px', marginLeft: '6px' }}
               onChange={(e) => saveLlmSettings({ ...llmSettings, timeoutMs: Number(e.target.value) || 0 })}
             />
-          </label>
-          <label>
-            Retry
+          </div>
+          <div className="form-item">
+            <span>????</span>
             <input
               type="number"
               value={llmSettings.retry}
-              style={{ width: '80px', marginLeft: '6px' }}
               onChange={(e) => saveLlmSettings({ ...llmSettings, retry: Number(e.target.value) || 0 })}
             />
-          </label>
-          <label>
-            Rate Limit/min
+          </div>
+          <div className="form-item">
+            <span>???? (ms)</span>
+            <input
+              type="number"
+              value={llmSettings.retryBaseMs}
+              onChange={(e) => saveLlmSettings({ ...llmSettings, retryBaseMs: Number(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="form-item">
+            <span>???? (ms)</span>
+            <input
+              type="number"
+              value={llmSettings.retryMaxMs}
+              onChange={(e) => saveLlmSettings({ ...llmSettings, retryMaxMs: Number(e.target.value) || 0 })}
+            />
+          </div>
+          <div className="form-item">
+            <span>?? (???)</span>
             <input
               type="number"
               value={llmSettings.rateLimitPerMin}
-              style={{ width: '100px', marginLeft: '6px' }}
               onChange={(e) => saveLlmSettings({ ...llmSettings, rateLimitPerMin: Number(e.target.value) || 0 })}
             />
-          </label>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="form-inline">
           <button
             className="btn-secondary"
             style={{ cursor: 'pointer', padding: '4px 8px' }}
             onClick={runLlm}
             disabled={llmLoading}
           >
-            {llmLoading ? 'LLM Calling...' : 'Call LLM'}
+            {llmLoading ? 'LLM ???...' : '?? LLM'}
           </button>
           <span style={{ fontSize: '12px', color: '#c00' }}>{llmError}</span>
         </div>
@@ -493,8 +554,9 @@ const SidePanel = () => {
           readOnly
           rows={4}
           style={{ width: '100%', fontSize: '12px', padding: '8px', boxSizing: 'border-box' }}
-          placeholder="LLM response will appear here..."
+          placeholder="LLM ?????????..."
         />
+
       </div>
       </div>
 
@@ -1066,23 +1128,67 @@ const SidePanel = () => {
       </div>
 
       <div className="card">
-      <h2 style={{ marginTop: 0 }}>Reports</h2>
-      <h3 style={{ marginTop: '16px', marginBottom: '8px' }}>导出历史（最近 {EXPORT_HISTORY_MAX} 条）</h3>
-      <div style={{ marginBottom: '12px', fontSize: '12px', color: '#666' }}>
-        导出记录保存在 storage，可点击「复制」再次复制该次导出的内容。
+      <h2 style={{ marginTop: 0 }}>????</h2>
+      <div className="form-inline" style={{ justifyContent: 'space-between', marginBottom: '8px' }}>
+        <div className="form-inline">
+          <span style={{ fontSize: '12px', color: '#94A3B8' }}>????</span>
+          <button
+            className={`btn-filter ${reportFilter === 'latest' ? 'active' : ''}`}
+            onClick={() => setReportFilter('latest')}
+          >
+            ??
+          </button>
+          <button
+            className={`btn-filter ${reportFilter === 'failed' ? 'active' : ''}`}
+            onClick={() => setReportFilter('failed')}
+          >
+            ??
+          </button>
+          <button
+            className={`btn-filter ${reportFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setReportFilter('all')}
+          >
+            ??
+          </button>
+        </div>
+        <div className="form-inline">
+          <button
+            className="btn-secondary"
+            style={{ cursor: 'pointer', padding: '4px 8px' }}
+            disabled={!latestReportItem}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(latestReportItem?.content || '')
+                setLatestReportCopyStatus('???????')
+                setTimeout(() => setLatestReportCopyStatus(''), 2000)
+              } catch (e) {
+                setLatestReportCopyStatus('????')
+              }
+            }}
+          >
+            ????
+          </button>
+          {latestReportCopyStatus && (
+            <span style={{ fontSize: '12px', color: '#94A3B8' }}>{latestReportCopyStatus}</span>
+          )}
+        </div>
+      </div>
+      <h3 style={{ marginTop: '8px', marginBottom: '8px' }}>??????? {EXPORT_HISTORY_MAX} ??</h3>
+      <div style={{ marginBottom: '12px', fontSize: '12px', color: '#94A3B8' }}>
+        ?????????????????????????
       </div>
       <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-        {exportHistory.length === 0 ? (
-          <li style={{ padding: '8px', color: '#999' }}>暂无导出记录</li>
+        {filteredReportItems.length === 0 ? (
+          <li style={{ padding: '8px', color: '#94A3B8' }}>??????</li>
         ) : (
-          exportHistory.map((item) => (
+          filteredReportItems.map((item) => (
             <li
               key={item.id}
               style={{
                 padding: '8px 10px',
                 marginBottom: '6px',
-                background: '#f8f8f8',
-                borderRadius: '4px',
+                background: '#111827',
+                borderRadius: '6px',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -1090,9 +1196,10 @@ const SidePanel = () => {
                 gap: '8px'
               }}
             >
-              <span style={{ fontSize: '12px', color: '#333' }}>
+              <span style={{ fontSize: '12px', color: '#E2E8F0' }}>
                 {item.timestamp ? new Date(item.timestamp).toLocaleString('zh-CN') : 'N/A'}
-                {item.kind ? ` (${item.kind}${item.format ? `:${item.format}` : ''})` : ''}
+                {item.format ? ` (${item.format})` : ''}
+                {isFailedReport(item) ? ' ? ??' : ''}
               </span>
               <button
                 className="btn-secondary"
@@ -1100,24 +1207,26 @@ const SidePanel = () => {
                 onClick={async () => {
                   try {
                     await navigator.clipboard.writeText(item.content || '');
-                    setExportHistoryCopyStatus(`已复制 (${new Date(item.timestamp).toLocaleTimeString('zh-CN')})`);
+                    setExportHistoryCopyStatus(`??? (${new Date(item.timestamp).toLocaleTimeString('zh-CN')})`);
                     setTimeout(() => setExportHistoryCopyStatus(''), 2000);
                   } catch (e) {
-                    setExportHistoryCopyStatus('复制失败');
+                    setExportHistoryCopyStatus('????');
                   }
                 }}
               >
-                复制
+                ??
               </button>
             </li>
           ))
         )}
       </ul>
       {exportHistoryCopyStatus && (
-        <span style={{ fontSize: '12px', color: '#666', marginTop: '4px', display: 'block' }}>{exportHistoryCopyStatus}</span>
+        <span style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px', display: 'block' }}>{exportHistoryCopyStatus}</span>
       )}
 
       </div>
+      <div style={{ marginTop: '12px' }}>
+</div>
       <div style={{ marginTop: '12px' }}>
         <button
           className="btn-secondary"
@@ -1187,7 +1296,7 @@ const SidePanel = () => {
             checked={replayOptions.captureScreenshots}
             onChange={(e) => setReplayOptions({ ...replayOptions, captureScreenshots: e.target.checked })}
           />
-          Capture Screenshots
+          ????
         </label>
         <label style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <input
@@ -1195,21 +1304,21 @@ const SidePanel = () => {
             checked={replayOptions.captureOnFailure}
             onChange={(e) => setReplayOptions({ ...replayOptions, captureOnFailure: e.target.checked })}
           />
-          Only On Failure
+          ????
         </label>
         <button
           className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => exportReport('json')}
         >
-          Export Report JSON
+          ???? JSON
         </button>
         <button
           className="btn-secondary"
           style={{ cursor: 'pointer', padding: '4px 8px' }}
           onClick={() => exportReport('markdown')}
         >
-          Export Report Markdown
+          ???? Markdown
         </button>
       </div>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1232,7 +1341,12 @@ const SidePanel = () => {
           真实执行
         </button>
       </div>
-      <div style={{ marginTop: '12px', fontSize: '12px' }}>
+            <div className={`status-banner ${statusInfo.tone}`} style={{ marginTop: '10px' }}>
+        <strong>??</strong>
+        <span>{statusInfo.text}</span>
+      </div>
+
+<div style={{ marginTop: '12px', fontSize: '12px' }}>
         <div style={{ marginBottom: '6px' }}>
           <strong>执行状态：</strong>
           <span style={{ color: execStatus === 'FAIL' ? '#c00' : execStatus === 'RUNNING' ? '#08c' : '#333' }}>
@@ -1243,7 +1357,7 @@ const SidePanel = () => {
         </div>
         {execReport?.logs?.length > 0 && (
           <details style={{ marginTop: '8px' }}>
-            <summary>Execution Logs ({execReport.logs.length})</summary>
+            <summary>???? ({execReport.logs.length})</summary>
             <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0' }}>
               {execReport.logs.map((log, i) => (
                 <li key={i} style={{ padding: '4px 0', borderBottom: '1px solid #eee', color: log.status === 'OK' ? '#080' : log.status === 'FAIL' ? '#c00' : '#666' }}>
@@ -1260,7 +1374,7 @@ const SidePanel = () => {
             <span className={`badge ${validationResult.status === 'PASS' ? 'pass' : 'fail'}`}>{validationResult.status}</span>
             {validationResult.issues?.length > 0 && (
               <details style={{ marginTop: '6px' }}>
-                <summary>Issues ({validationResult.issues.length})</summary>
+                <summary>?? ({validationResult.issues.length})</summary>
                 <ul style={{ listStyle: 'none', padding: 0, margin: '6px 0 0' }}>
                   {validationResult.issues.map((issue, i) => (
                     <li key={i} style={{ padding: '4px 0', fontSize: '11px', color: '#c00' }}>
@@ -1286,7 +1400,7 @@ const SidePanel = () => {
             </summary>
             {assertionResult.issues?.length > 0 ? (
               <details style={{ marginTop: '8px' }}>
-                <summary>Issues ({assertionResult.issues.length})</summary>
+                <summary>?? ({assertionResult.issues.length})</summary>
                 <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0' }}>
                 {assertionResult.issues.map((issue, i) => (
                   <li key={i} style={{ padding: '6px 0', fontSize: '12px', borderBottom: '1px solid #eee' }}>
